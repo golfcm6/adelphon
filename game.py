@@ -9,6 +9,8 @@ TERRAIN_RANGE = 8 # side length of terrain block
 TREASURE_RADIUS = 2
 ANIMAL_RANGE = 1
 ANIMAL_DIRECTION_CHANGE_PROB = 0.15
+NUM_RELAYERS = 2
+NUM_RUNNERS = 4
 
 class Terrain(Enum):
     FLAT_GROUND = 0
@@ -87,11 +89,11 @@ class Game:
         self.animal_locations, self.animal_movements = list(zip(*new_pairs))
 
     # randomly chooses a location on the map
-    def random_coord_helper():
+    def random_coord_helper(self):
         return np.random.randint(MAP_DIMENSIONS[0]), np.random.randint(MAP_DIMENSIONS[1])
 
     # randomly chooses magnitude of animal movement based on ANIMAL_RANGE
-    def random_movement_helper():
+    def random_movement_helper(self):
         return np.random.randint(-ANIMAL_RANGE, ANIMAL_RANGE), np.random.randint(-ANIMAL_RANGE, ANIMAL_RANGE)
 
     # return new location after applying move

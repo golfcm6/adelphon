@@ -1,0 +1,2 @@
+port_start = 50000
+TRANSMISSION_SIZE_LIMIT = 2048
