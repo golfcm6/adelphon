@@ -2,11 +2,14 @@ from collections import namedtuple
 from enum import Enum
 import numpy as np
 
+from common import distance, generate_coord_grid
+
 MAP_DIMENSIONS = (100, 100)
 NUM_ANIMALS = 5
 ANIMAL_RADIUS = 10
 TERRAIN_RANGE = 8 # side length of terrain block
 TREASURE_RADIUS = 2
+COMM_RADIUS = 20
 ANIMAL_RANGE = 1
 ANIMAL_DIRECTION_CHANGE_PROB = 0.15
 NUM_RELAYERS = 2
@@ -32,17 +35,18 @@ assert abs(sum(TERRAIN_PROBABILITIES) - 1) < 1e-8, "probabilities must sum to 1"
 GameState = namedtuple('GameState', ['alive', 'won', 'wait_time', 'local_view'])
 LocalView = namedtuple("LocalView", ['terrain', 'animals', 'treasure'])
 
-# helper function to find the distance between two points
-def distance(c1, c2):
-    return np.linalg.norm(np.array(c1) - np.array(c2))
-
 class Game:
     def __init__(self, seed):
         np.random.seed(seed)
+        # relayers must be evenly spaced around map
+        # TODO: possibly change this to be spread out grid of people
+        self.relayer_locations = [self.random_coord_helper() for _ in range(NUM_RELAYERS)]
+        self.runner_start_locations = [self.random_coord_helper() for _ in range(NUM_RUNNERS)]
         self.animal_locations = tuple(self.random_coord_helper() for _ in range(NUM_ANIMALS))
         self.animal_movements = tuple(self.random_movement_helper() for _ in range(NUM_ANIMALS))
         self.treasure = self.random_coord_helper()
         self.terrain = np.random.choice(len(Terrain), MAP_DIMENSIONS, p = TERRAIN_PROBABILITIES).astype(np.int8)
+        self.coords = generate_coord_grid(MAP_DIMENSIONS)
 
     def query(self, location):
         if location == self.treasure:
@@ -59,10 +63,11 @@ class Game:
         x, y = location
         half = TERRAIN_RANGE // 2
         local_terrain = self.terrain[max(0, y - half) : y + half + 1, max(0, x - half) : x + half + 1]
+        local_coords = self.coords[max(0, y - half) : y + half + 1, max(0, x - half) : x + half + 1]
         local_animals = [animal for animal in self.animal_locations if distance(animal, location) <= ANIMAL_RADIUS]
         local_treasure = self.treasure if (distance(location, self.treasure) <= TREASURE_RADIUS) else None
 
-        local_view = LocalView(terrain = local_terrain, animals = local_animals, treasure = local_treasure)
+        local_view = LocalView(terrain = (local_terrain, local_coords), animals = local_animals, treasure = local_treasure)
         current_terrain = Terrain(self.terrain[x, y])
         return GameState(alive = True, won = False, wait_time = WAIT_TIME_MAP[current_terrain], local_view = local_view)
 
