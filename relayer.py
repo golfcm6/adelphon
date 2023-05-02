@@ -18,7 +18,7 @@ class Relayer:
         self.animal_locations = set()
         # local game map with this relayers knowledge of terrain
         self.terrains = np.full(MAP_DIMENSIONS, -1, dtype=np.int8)
-        self.coords = generate_coord_grid(MAP_DIMENSIONS)
+        self.coords = generate_coord_grid()
         self.runner_attendance = 0
         self.relayer_attendance = 0
 
@@ -27,6 +27,14 @@ class Relayer:
         self.sel = selectors.DefaultSelector()
         self.relayer_connections = []
         self.runner_connections = []
+        # both of these dictionaries use sockets (from self.runner_connections) as keys to make replying
+        # to runners easier
+        self.runner_within_range = dict()
+        self.runner_locations = dict()
+        self.current_runner_locations = set() # set of locations for the runners that are within range
+        # boolean array for whether a runner has gotten close enough to each grid position to check for treasure
+        self.checked_for_treasure = np.full(MAP_DIMENSIONS, False)
+        self.runner_was_here = np.full(MAP_DIMENSIONS, False)
 
         # socket for all runners to connect to
         self.runner_facing_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -74,31 +82,32 @@ class Relayer:
         data = key.data
         recv_data = sock.recv(RELAYER_TRANSMISSION_SIZE_LIMIT)
         if recv_data:
-            # message convention: {0, 1}|{id}|
-            # first arg: first bit is 0 if runner, 1 if relayer sending msg,
-            # second arg: id of the runner/relayer
-            # third arg: payload
-            # runner payload convention: 0|id|treasure|animals|terrain
-            # relayer payload convention: XXX
-            # TODO: update comments
-
             recv_data = recv_data.decode("utf-8")
+            # runners that are too far away will still send a heartbeat so we can make sure
+            # all runners and relayers are synced up in the game
             if recv_data == TOO_FAR_AWAY:
+                self.runner_within_range[sock] = False
                 self.runner_attendance += 1
-                # check if this is the last runner to hear from in this "epoch"
+                # when we've heard from all runners, we can sync all of the relayers by sharing info
                 if self.runner_attendance == NUM_RUNNERS:
                     self.sync_relayers()
             else:
                 recv_data = recv_data.split("|")
                 # runner message
                 if recv_data[0] == RUNNER_CODE:
-                    self.parse_info(recv_data)
+                    self.runner_within_range[sock] = True
+                    location = self.parse_info(recv_data)
+                    self.runner_locations[sock] = location
+                    self.current_runner_locations.add(location)
                     self.runner_attendance += 1
                     if self.runner_attendance == NUM_RUNNERS:
                         self.sync_relayers()
+                # relayer message
                 elif recv_data[0] == RELAYER_CODE:
                     self.parse_info(recv_data)
                     self.relayer_attendance += 1
+                    # similarly once we've heard from all relayers, we can dispatch info back to
+                    # nearby runners
                     if self.relayer_attendance == NUM_RELAYERS:
                         self.sync_runners()
                 else:
@@ -110,8 +119,12 @@ class Relayer:
 
     # share info with other relayers
     def sync_relayers(self):
-        info = self.prepare_info_for_relayer()
+        useful_runner_locations = list(filter(lambda x: not self.runner_was_here[x], self.current_runner_locations))
+        info = prepare_info(self.terrains, self.coords, self.animal_locations, self.treasure_location, 
+                            RELAYER_CODE, self.id, useful_runner_locations)
+        # reset runner related info after syncing
         self.runner_attendance = 0
+        self.current_runner_locations = set()
         # use self.connections to send info to higher id relayers
         for sock in self.relayer_connections:
             sock.send(info.encode("utf-8"))
@@ -121,10 +134,42 @@ class Relayer:
 
     def sync_runners(self):
         for sock in self.runner_connections:
-            pass
+            if self.runner_within_range[sock]:
+                info = self.compile_info_for_runner(self.runner_locations[sock])
+                sock.send(info.encode("utf-8"))
+            else:
+                sock.send(TOO_FAR_AWAY.encode("utf-8"))
+
+    # info sent by relayer to a runner
+    # convention: id|treasure|target|animals|terrains
+    def compile_info_for_runner(self, runner_location):
+        target = self.find_target(runner_location)
+        # use standard prepare_info function to help compile some info and then rearrange using new schema
+        info = prepare_info(self.terrains, self.coords, self.animal_locations, self.treasure_location, 
+                            RUNNER_CODE, self.id, [target])
+        _, id, target, treasure, animals, terrain = info.split("|")
+        return "|".join([id, treasure, target, animals, terrain])
+
+    # find a target grid position that is close to the runner but hasn't yet been checked for treasure
+    def find_target(self, runner_location):
+        if self.treasure_location is not None:
+            return self.treasure_location
+        
+        i, j = runner_location
+        # iterate through grid positions near the runner by incrementing L1 norm
+        # ideally we're using L2 norm, but this makes the iteration tractable
+        for L1 in range(L1_SWEEP_MIN, MAP_DIMENSIONS[0] + MAP_DIMENSIONS[1] - 1):
+            for di in range(L1 + 1):
+                dj = L1 - di # the difference in i and j must add up to the L1 norm
+                coords = {(i + di, j + dj), (i - di, j + dj), (i + di, j - dj), (i - di, j - dj)}
+                for coord in coords:
+                    if is_valid_location(coord) and not self.checked_for_treasure[coord]:
+                        return coord
+        raise Exception("Somehow every location on the map has been checked")
+
 
     def parse_info(self, data):
-        code, id, treasure, animals, terrains = data
+        code, id, location_info, treasure, animals, terrains = data
         if treasure:
             self.treasure_location = eval(treasure)
 
@@ -140,48 +185,25 @@ class Relayer:
             for terrain in terrains:
                 i, j, terrain_type = eval(terrain)
                 if self.terrains[i][j] == -1:
-                    self.t[i][j] = terrain_type
+                    self.terrains[i][j] = terrain_type
                 else:
                     if self.terrains[i][j] != terrain_type:
                         # TODO: anomaly/liar
                         pass
+                    
+        # update checked_for_treasure grid based on runner location 
+        # mark all tiles within TREASURE_RADIUS as True
+        locations = location_info.split('!')
+        for location in locations:
+            i, j = eval(location)
+            self.runner_was_here[i, j] = True
+            for i2 in range(i - TREASURE_RADIUS, i + TREASURE_RADIUS + 1):
+                for j2 in range(j - TREASURE_RADIUS, j + TREASURE_RADIUS + 1):
+                    if is_valid_location((i2, j2)) and distance((i, j), (i2, j2)) <= TREASURE_RADIUS:
+                        self.checked_for_treasure[i2, j2] = True
 
-    # prepare info to transmit to other relayers once all runners are accounted for
-    # convention: relayer_code|id|treasure|animals|terrain (we prioritize information in this same order)
-    def prepare_info_for_relayer(self):
-        relevant_info = RELAYER_CODE + "|" + self.id + "|"
-        # treasure info logic
-        if self.treasure_location: 
-            relevant_info += str(self.treasure_location)
-        relevant_info += "|"
-
-        # animal info logic
-        for animal in self.animal_locations:
-            # + 1 for the required pipe separator between animals and terrain
-            if len(relevant_info) + len(str(animal)) + 1 > RELAYER_TRANSMISSION_SIZE_LIMIT:
-                break # relevant info string has gotten too long
-            else:
-                relevant_info += str(animal) + '!'
-        # remove extra separator
-        if relevant_info[-1] == '!':
-            relevant_info = relevant_info[:-1]
-        relevant_info += "|"
-
-        # terrain info logic
-        terrains, coords = np.flatten(terrains), coords.reshape((-1, 2))
-        coords = coords[np.argsort(terrains)[::-1]]
-        terrains = np.sort(terrains)[::-1]
-        for terrain, coord in zip(terrains, coords):
-            info = (*coord, terrain)
-            if len(relevant_info) + len(str(info)) > RELAYER_TRANSMISSION_SIZE_LIMIT:
-                break # relevant info string has gotten too long
-            else:
-                relevant_info += str(terrain) + '!'
-        # remove extra separator
-        if relevant_info[-1] == '!':
-            relevant_info = relevant_info[:-1]
-
-        return relevant_info
+        if code == RUNNER_CODE:
+            return eval(location_info)
 
 def main(seed, id):
     assert id < NUM_RELAYERS, "invalid id"

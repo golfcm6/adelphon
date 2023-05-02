@@ -2,16 +2,18 @@ from collections import namedtuple
 from enum import Enum
 import numpy as np
 
-from common import distance, generate_coord_grid
+from common import distance, generate_coord_grid, is_valid_location, apply_move
 
 MAP_DIMENSIONS = (100, 100)
 NUM_ANIMALS = 5
 ANIMAL_RADIUS = 10
+KILL_RADIUS = 3
 TERRAIN_RANGE = 8 # side length of terrain block
 TREASURE_RADIUS = 2
 COMM_RADIUS = 20
 ANIMAL_RANGE = 1
 ANIMAL_DIRECTION_CHANGE_PROB = 0.15
+ANIMAL_STAGNATE_PROB = 0.2
 NUM_RELAYERS = 2
 NUM_RUNNERS = 4
 
@@ -46,14 +48,16 @@ class Game:
         self.animal_movements = tuple(self.random_movement_helper() for _ in range(NUM_ANIMALS))
         self.treasure = self.random_coord_helper()
         self.terrain = np.random.choice(len(Terrain), MAP_DIMENSIONS, p = TERRAIN_PROBABILITIES).astype(np.int8)
-        self.coords = generate_coord_grid(MAP_DIMENSIONS)
+        self.coords = generate_coord_grid()
 
     def query(self, location):
         if location == self.treasure:
             return GameState(alive = True, won = True, wait_time = 0, local_view = None)  # treasure found and game won
 
-        if location in self.animal_locations:
-            return GameState(alive = False, won = False, wait_time = 0, local_view = None) # death (killed by an animal)
+        for animal_location in self.animal_locations:
+            # death (killed by an animal)
+            if distance(location, animal_location) <= KILL_RADIUS:
+                return GameState(alive = False, won = False, wait_time = 0, local_view = None)
 
         # any other outcome means you are still alive and get local_view
         # convention: animal_radius > terrain_radius >> treasure_radius
@@ -73,6 +77,9 @@ class Game:
 
     # update one animal's location and movement pattern
     def update_single_animal(self, animal_loc, animal_movement):
+        # randomly stay in the same location with some probability
+        if np.random.rand() < ANIMAL_STAGNATE_PROB:
+            return animal_loc, animal_movement
         # randomly change direction with some probability for the next move
         new_dir = animal_movement
         if (np.random.rand() < ANIMAL_DIRECTION_CHANGE_PROB):
@@ -80,11 +87,11 @@ class Game:
                 new_dir = self.random_movement_helper()
 
         # apply the movement based off current move tuple
-        new_loc = self.apply_move(animal_loc, new_dir)
+        new_loc = apply_move(animal_loc, new_dir)
         # if not a valid move, update the movement pattern randomly and try again
-        while not self.check_location_valid(new_loc):
+        while not is_valid_location(new_loc):
             new_dir = self.random_movement_helper()
-            new_loc = self.apply_move(animal_loc, new_dir)
+            new_loc = apply_move(animal_loc, new_dir)
 
         return new_loc, new_dir
 
@@ -100,13 +107,3 @@ class Game:
     # randomly chooses magnitude of animal movement based on ANIMAL_RANGE
     def random_movement_helper(self):
         return np.random.randint(-ANIMAL_RANGE, ANIMAL_RANGE), np.random.randint(-ANIMAL_RANGE, ANIMAL_RANGE)
-
-    # return new location after applying move
-    def apply_move(self, location, move):
-        return location[0] + move[0], location[1] + move[1]
-
-    # check if a potential location is within the bounds of the map
-    def check_location_valid(self, location):
-        x, y = location
-        x_lim, y_lim = MAP_DIMENSIONS
-        return (x >= 0 and x < x_lim) and (y >= 0 and y < y_lim)
