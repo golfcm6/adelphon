@@ -1,14 +1,16 @@
 import numpy as np
 
-from game import MAP_DIMENSIONS
-
-port_start = 50000
-RUNNER_TRANSMISSION_SIZE_LIMIT = 2048
-RELAYER_TRANSMISSION_SIZE_LIMIT = 8192
-TOO_FAR_AWAY = "20"
-RUNNER_CODE = "0"
-RELAYER_CODE = "1"
+PORT_START = 50000
+VISUALIZER_PORT = PORT_START - 1
+RUNNER_TRANSMISSION_SIZE_LIMIT = 32
+RELAYER_TRANSMISSION_SIZE_LIMIT = 128
+VISUALIZER_TRANSMISSION_SIZE_LIMIT = 8092
+MESSAGE_RECEIVED = '1000'
+TOO_FAR_AWAY = '20'
+RUNNER_CODE = '0'
+RELAYER_CODE = '1'
 L1_SWEEP_MIN = 1
+MAP_DIMENSIONS = (30, 30) # needs to be here to avoid circular import
 
 # helper function to find the distance between two points
 def distance(c1, c2):
@@ -29,6 +31,10 @@ def generate_coord_grid():
     i, j = np.meshgrid(np.arange(MAP_DIMENSIONS[0]), np.arange(MAP_DIMENSIONS[1]), indexing = 'ij')
     return np.dstack((i, j))
 
+# divide rgb color value so that it falls in the range [0, 1]
+def convert_color(rgb):
+    return np.array(rgb) / 255
+
 # helper function for sending information from runners to relayers or between relayers
 # message convention: code|id|location|treasure|animal_coords|terrain_info
 # treasure is empty string if not found, otherwise tuple of treasure coords
@@ -37,6 +43,7 @@ def generate_coord_grid():
 def prepare_info(terrains, coords, animals, treasure, sender_code, id, runner_locations):
     assert sender_code == RUNNER_CODE or sender_code == RELAYER_CODE
     limit = RUNNER_TRANSMISSION_SIZE_LIMIT if sender_code == RUNNER_CODE else RELAYER_TRANSMISSION_SIZE_LIMIT
+
     location_info = "!".join([str(location) for location in runner_locations])
     relevant_info = str(sender_code) + "|" + str(id) + "|" + location_info + "|"
     # treasure info logic
@@ -57,7 +64,7 @@ def prepare_info(terrains, coords, animals, treasure, sender_code, id, runner_lo
     relevant_info += "|"
 
     # terrain info logic - encode tuple of x, y, terrain_type
-    terrains, coords = np.flatten(terrains), coords.reshape((-1, 2))
+    terrains, coords = terrains.flatten(), coords.reshape((-1, 2))
     coords = coords[np.argsort(terrains)[::-1]]
     terrains = np.sort(terrains)[::-1]
     for terrain, coord in zip(terrains, coords):
@@ -65,7 +72,7 @@ def prepare_info(terrains, coords, animals, treasure, sender_code, id, runner_lo
         if len(relevant_info) + len(str(info)) > limit:
             break # relevant info string has gotten too long
         else:
-            relevant_info += str(terrain) + '!'
+            relevant_info += str(info) + '!'
     # remove extra separator
     if relevant_info[-1] == '!':
         relevant_info = relevant_info[:-1]

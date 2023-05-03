@@ -2,12 +2,12 @@ from collections import namedtuple
 from enum import Enum
 import numpy as np
 
-from common import distance, generate_coord_grid, is_valid_location, apply_move
+from common import *
 
-MAP_DIMENSIONS = (100, 100)
+
 NUM_ANIMALS = 5
 ANIMAL_RADIUS = 10
-KILL_RADIUS = 3
+KILL_RADIUS = 2
 TERRAIN_RANGE = 8 # side length of terrain block
 TREASURE_RADIUS = 2
 COMM_RADIUS = 20
@@ -15,7 +15,7 @@ ANIMAL_RANGE = 1
 ANIMAL_DIRECTION_CHANGE_PROB = 0.15
 ANIMAL_STAGNATE_PROB = 0.2
 NUM_RELAYERS = 2
-NUM_RUNNERS = 4
+NUM_RUNNERS = 1
 
 class Terrain(Enum):
     FLAT_GROUND = 0
@@ -30,9 +30,21 @@ WAIT_TIME_MAP = {
     Terrain.QUICKSAND: 10
 }
 
-TERRAIN_PROBABILITIES = [0.55, 0.25, 0.15, 0.05]
+WAIT_TIME_MAP_INVERSE = {v:k for k,v in WAIT_TIME_MAP.items()}
+
+TERRAIN_COLOR_MAP = {
+    Terrain.FLAT_GROUND: convert_color([14, 87, 20]),
+    Terrain.ROCKS: convert_color([43, 46, 43]),
+    Terrain.MUD: convert_color([69, 39, 6]),
+    Terrain.QUICKSAND: convert_color([237, 204, 85])
+}
+
+TERRAIN_PROBABILITIES = [0.5, 0.25, 0.2, 0.05]
 assert len(Terrain) == len(TERRAIN_PROBABILITIES)
 assert abs(sum(TERRAIN_PROBABILITIES) - 1) < 1e-8, "probabilities must sum to 1"
+assert set(WAIT_TIME_MAP.keys()) == set(Terrain) and set(TERRAIN_COLOR_MAP.keys()) == set(Terrain)
+
+MAINTAIN_TERRAIN_TYPE_PROB = 0.7
 
 GameState = namedtuple('GameState', ['alive', 'won', 'wait_time', 'local_view'])
 LocalView = namedtuple("LocalView", ['terrain', 'animals', 'treasure'])
@@ -47,8 +59,10 @@ class Game:
         self.animal_locations = tuple(self.random_coord_helper() for _ in range(NUM_ANIMALS))
         self.animal_movements = tuple(self.random_movement_helper() for _ in range(NUM_ANIMALS))
         self.treasure = self.random_coord_helper()
-        self.terrain = np.random.choice(len(Terrain), MAP_DIMENSIONS, p = TERRAIN_PROBABILITIES).astype(np.int8)
+        self.terrain = self.generate_terrain_grid()
         self.coords = generate_coord_grid()
+        runner_start_terrains = [Terrain(self.terrain[loc]) for loc in self.runner_start_locations]
+        self.runner_start_wait_times = [WAIT_TIME_MAP[terrain] for terrain in runner_start_terrains]
 
     def query(self, location):
         if location == self.treasure:
@@ -58,6 +72,9 @@ class Game:
             # death (killed by an animal)
             if distance(location, animal_location) <= KILL_RADIUS:
                 return GameState(alive = False, won = False, wait_time = 0, local_view = None)
+
+        # update animals on every timestep
+        self.update_animals()
 
         # any other outcome means you are still alive and get local_view
         # convention: animal_radius > terrain_radius >> treasure_radius
@@ -90,7 +107,7 @@ class Game:
         new_loc = apply_move(animal_loc, new_dir)
         # if not a valid move, update the movement pattern randomly and try again
         while not is_valid_location(new_loc):
-            new_dir = self.random_movement_helper()
+            new_dir = tuple(-val for val in new_dir) # bounce off the edges of the map
             new_loc = apply_move(animal_loc, new_dir)
 
         return new_loc, new_dir
@@ -107,3 +124,24 @@ class Game:
     # randomly chooses magnitude of animal movement based on ANIMAL_RANGE
     def random_movement_helper(self):
         return np.random.randint(-ANIMAL_RANGE, ANIMAL_RANGE), np.random.randint(-ANIMAL_RANGE, ANIMAL_RANGE)
+
+    def generate_terrain_grid(self):
+        ilim, jlim = MAP_DIMENSIONS
+        terra = np.ones(MAP_DIMENSIONS, dtype = np.int8)
+        # go up each diagonal
+        for d in range(1, ilim + jlim):
+            for i in reversed(range(min(ilim, d))):
+                j = d - 1 - i
+                # stop before you go past the right end of the map
+                if j >= jlim:
+                    break
+                # the adjacent squares on previous diagonal and previous square on current 
+                # diagonal are this square's neighbors
+                potential_neighbors = [(i+1, j-1), (i, j-1), (i-1, j)]
+                neighboring_terrain = [terra[loc] for loc in potential_neighbors if is_valid_location(loc)]
+                # keep the same type of terrain with some probability
+                if neighboring_terrain and np.random.rand() < MAINTAIN_TERRAIN_TYPE_PROB:
+                    terra[i, j] = np.random.choice(neighboring_terrain)
+                else:
+                    terra[i, j] = np.random.choice(len(Terrain), p = TERRAIN_PROBABILITIES)
+        return terra

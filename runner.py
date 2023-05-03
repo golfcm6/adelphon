@@ -13,7 +13,7 @@ class Runner:
         self.won = False
         self.relayer_locations = []
         self.location = self.game_instance.runner_start_locations[self.id]
-        self.wait_time = 0
+        self.wait_time = self.game_instance.runner_start_wait_times[self.id]
         self.treasure_location = None
         self.terrains = np.full(MAP_DIMENSIONS, -1, dtype=np.int8)
         self.direction = (0, 0)
@@ -22,12 +22,14 @@ class Runner:
         self.address = socket.gethostbyname(socket.gethostname())
         self.sockets = [socket.socket(socket.AF_INET, socket.SOCK_STREAM) for _ in range(NUM_RELAYERS)]
         for i in range(NUM_RELAYERS):
-            self.sockets[i].connect((self.address, port_start + i))
+            self.sockets[i].connect((self.address, PORT_START + i))
+        # socket for visualizer
+        self.visualizer_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.visualizer_socket.connect((self.address, VISUALIZER_PORT))
 
     def one_step(self):
-        if self.wait_time > 0:
-            self.wait_time -= 1 # keep waiting to move
-        else:
+        print(self.location)
+        if self.wait_time == 0:
             self.location = apply_move(self.location, self.direction)
 
         # query the game map and update your own state
@@ -39,10 +41,13 @@ class Runner:
         if not self.alive or self.won:
             return
         
-        # only start waiting if you're not already waiting
+        # potentially start waiting if you're not already waiting
         if self.wait_time == 0:
             self.wait_time = game_state.wait_time
-        (terrains, coords), animals, treasure = self.local_view
+        # can decrement counter now if you're already waiting
+        else:
+            self.wait_time -= 1
+        (terrains, coords), animals, treasure = game_state.local_view
         relevant_info = prepare_info(terrains, coords, animals, treasure, RUNNER_CODE, self.id, [self.location])
 
         # send info to nearby relayers and a placeholder message to all others
@@ -51,6 +56,8 @@ class Runner:
                 self.sockets[i].send(relevant_info.encode('utf-8'))
             else:
                 self.sockets[i].send(TOO_FAR_AWAY.encode('utf-8'))
+        self.visualizer_socket.sendall((RUNNER_CODE + "|" + str(self.location)).encode("utf-8"))
+        self.visualizer_socket.recv(len(MESSAGE_RECEIVED))
     
         # logic for receiving relayer responses
         received_response = False
@@ -59,7 +66,6 @@ class Runner:
             if not recv_data:
                 raise ConnectionError(f"Lost connection to relayer {i}")
             data = recv_data.decode("utf-8")
-            
             # too far away message should only ever be echoed i.e. you shouldn't ever hear it from a relayer
             # that is close enough
             if data == TOO_FAR_AWAY:
@@ -98,34 +104,43 @@ class Runner:
                 x, y = self.location
                 target_x, target_y = eval(relayer_target)
                 theta = np.rint(np.arctan2(target_y - y, target_x - x) / (np.pi / 4)) * (np.pi / 4)
-                move = np.rint([np.cos(theta), np.sin(theta)])
+                move = np.rint([np.cos(theta), np.sin(theta)]).astype(np.int8)
                 proposed_loc = apply_move(self.location, move)
 
-                # if quicksand or animal in move, try pi/4 counterclockwise - if all moves bad stay put                
+                # if quicksand or animal in move, try pi/4 counterclockwise - if all moves bad stay put
                 for _ in range(8):
-                    min_dist = min(distance(animal_loc, proposed_loc) for animal_loc in relayer_animals)
-                    if min_dist > KILL_RADIUS and relayer_terrain[proposed_loc] != Terrain.QUICKSAND:
+                    # find the distance to the nearest animal if there are any nearby
+                    if relayer_animals:
+                        min_dist = min(distance(eval(animal_loc), proposed_loc) for animal_loc in relayer_animals.split("!"))
+                    else:
+                        min_dist = KILL_RADIUS + 1
+                    if is_valid_location(proposed_loc) and min_dist > KILL_RADIUS and \
+                                        self.terrains[proposed_loc] != Terrain.QUICKSAND.value:
                         break
                     theta += (np.pi / 4)
-                    move = np.rint([np.cos(theta), np.sin(theta)])
+                    move = np.rint([np.cos(theta), np.sin(theta)]).astype(np.int8)
                     proposed_loc = apply_move(self.location, move)
-        
+
         # if not in range of any relayer, make a move based on your own view
         if not received_response:
-            theta = np.random.randint(8) * (np.pi / 4)
-            move = np.rint([np.cos(theta), np.sin(theta)])
-        
-        self.direction = move        
+            valid = False
+            while not valid:
+                theta = np.random.randint(8) * (np.pi / 4)
+                move = np.rint([np.cos(theta), np.sin(theta)]).astype(np.int8)
+                valid = is_valid_location(apply_move(self.location, move))
+
+
+        self.direction = move
 
 def main(seed, id):
     runner = Runner(seed, id)
     while True:
         runner.one_step()
         if not runner.alive:
-            print("This runner has died")
+            print("runner " + str(runner.id) + " has died")
             break
         if runner.won:
-            print("This runner has won")
+            print("runner " + str(runner.id) + " has won")
             break
 
 if __name__ == '__main__':
