@@ -1,4 +1,4 @@
-from collections import namedtuple
+from collections import namedtuple, OrderedDict
 from enum import Enum
 import numpy as np
 
@@ -32,12 +32,12 @@ WAIT_TIME_MAP = {
 
 WAIT_TIME_MAP_INVERSE = {v:k for k,v in WAIT_TIME_MAP.items()}
 
-TERRAIN_COLOR_MAP = {
-    Terrain.FLAT_GROUND: convert_color([14, 87, 20]),
-    Terrain.ROCKS: convert_color([43, 46, 43]),
-    Terrain.MUD: convert_color([69, 39, 6]),
-    Terrain.QUICKSAND: convert_color([237, 204, 85])
-}
+TERRAIN_COLOR_MAP = OrderedDict([
+    (Terrain.FLAT_GROUND, convert_color([14, 87, 20])),
+    (Terrain.ROCKS, convert_color([46, 46, 46])),
+    (Terrain.MUD, convert_color([69, 39, 6])),
+    (Terrain.QUICKSAND, convert_color([237, 204, 85]))
+])
 
 TERRAIN_PROBABILITIES = [0.5, 0.25, 0.2, 0.05]
 assert len(Terrain) == len(TERRAIN_PROBABILITIES)

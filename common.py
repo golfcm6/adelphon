@@ -10,7 +10,7 @@ TOO_FAR_AWAY = '20'
 RUNNER_CODE = '0'
 RELAYER_CODE = '1'
 L1_SWEEP_MIN = 1
-MAP_DIMENSIONS = (30, 30) # needs to be here to avoid circular import
+MAP_DIMENSIONS = (100, 100) # needs to be here to avoid circular import
 
 # helper function to find the distance between two points
 def distance(c1, c2):

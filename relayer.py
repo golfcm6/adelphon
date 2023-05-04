@@ -17,7 +17,7 @@ class Relayer:
         self.treasure_location = None
         # set of tuples (x,y)
         self.animal_locations = set()
-        # local game map with this relayers knowledge of terrain
+        # local game map with this relayer's knowledge of terrain
         self.terrains = np.full(MAP_DIMENSIONS, BLANK_INDEX, dtype=np.int8)
         self.coords = generate_coord_grid()
         self.runner_attendance = 0

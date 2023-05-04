@@ -4,25 +4,22 @@ import selectors
 import types
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
+from collections import OrderedDict
 
 from game import *
 
-NON_TERRAIN_COLOR_MAP = {
-    'treasure': convert_color([60, 255, 0]),
-    'animal': convert_color([237, 24, 17]),
-    'runner': convert_color([140, 14, 130]),
-    'relayer': convert_color([17, 237, 230]),
-    'blank': convert_color([255, 255, 255])
-}
+NON_TERRAIN_COLOR_MAP = OrderedDict([
+    ('treasure', convert_color([60, 255, 0])),
+    ('animal', convert_color([237, 24, 17])),
+    ('runner', convert_color([140, 14, 130])),
+    ('relayer', convert_color([17, 237, 230])),
+    ('blank', convert_color([255, 255, 255]))
+])
 
-BASE_INDEX = len(Terrain)
-TREASURE_INDEX = BASE_INDEX
-ANIMAL_INDEX = BASE_INDEX + 1
-RUNNER_INDEX = BASE_INDEX + 2
-RELAYER_INDEX = BASE_INDEX + 3
-BLANK_INDEX = BASE_INDEX + 4
+interval = (len(Terrain), len(Terrain) + len(NON_TERRAIN_COLOR_MAP.keys()))
+TREASURE_INDEX, ANIMAL_INDEX, RUNNER_INDEX, RELAYER_INDEX, BLANK_INDEX = [i for i in range(*interval)]
 
-color_map = ListedColormap(list(TERRAIN_COLOR_MAP.values()) + list(NON_TERRAIN_COLOR_MAP.values()))
+color_map = ListedColormap(list(TERRAIN_COLOR_MAP.values()) + list(NON_TERRAIN_COLOR_MAP.values()), N = interval[1])
 
 # helper function to create a 3x3 square with value val centered at loc
 def blot(map, loc, val):
@@ -42,14 +39,10 @@ class Visualizer:
         self.sel.register(self.sock, selectors.EVENT_READ, data=None)
 
         self.game_instance = Game(seed)
-        self.base_index = len(Terrain)
         self.base_map = self.get_base_map()
         self.runner_locations = []
         self.runner_attendance = 0
         self.relayer_attendance = 0
-
-        # self.im = plt.imshow(self.base_map.copy(), cmap = color_map)
-        # plt.show(block = False)
 
         # used for cycling the displayed relayer map
         self.curr_relayer_id = 0
@@ -76,13 +69,6 @@ class Visualizer:
         map = self.add_animals(self.base_map.copy())
         for loc in self.runner_locations:
             map = blot(map, loc, RUNNER_INDEX)
-
-        # self.im = plt.imshow(map, cmap = color_map)
-        # plt.ion()
-        # plt.show()
-        # self.im.set_data(map)
-        # plt.draw()
-        # plt.pause(1)
 
         # reset attendance and locations
         self.runner_attendance = 0

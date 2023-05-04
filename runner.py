@@ -129,7 +129,6 @@ class Runner:
                 move = np.rint([np.cos(theta), np.sin(theta)]).astype(np.int8)
                 valid = is_valid_location(apply_move(self.location, move))
 
-
         self.direction = move
 
 def main(seed, id):
