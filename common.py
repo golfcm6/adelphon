@@ -9,7 +9,7 @@ MESSAGE_RECEIVED = '1000'
 TOO_FAR_AWAY = '20'
 RUNNER_CODE = '0'
 RELAYER_CODE = '1'
-L1_SWEEP_MIN = 1
+LINF_SWEEP_MIN = 1 # TODO: increase value to allow Dijkstra's to get around obstacles
 MAP_DIMENSIONS = (100, 100) # needs to be here to avoid circular import
 
 # helper function to find the distance between two points

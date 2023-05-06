@@ -172,15 +172,27 @@ class Relayer:
             return self.treasure_location
 
         i, j = runner_location
-        # iterate through grid positions near the runner by incrementing L1 norm
-        # ideally we're using L2 norm, but this makes the iteration tractable
-        for L1 in range(L1_SWEEP_MIN, MAP_DIMENSIONS[0] + MAP_DIMENSIONS[1] - 1):
-            for di in range(L1 + 1):
-                dj = L1 - di # the difference in i and j must add up to the L1 norm
-                coords = {(i + di, j + dj), (i - di, j + dj), (i + di, j - dj), (i - di, j - dj)}
-                for coord in coords:
-                    if is_valid_location(coord) and not self.checked_for_treasure[coord]:
-                        return coord
+        # L-infinity norm is the appropriate norm for this game since the runners can move in all 8 directions
+        # iterate through grid positions near the runner by incrementing LINF norm
+        LINF_SWEEP_MAX = max(i, j, MAP_DIMENSIONS[0] - 1 - i, MAP_DIMENSIONS[1] - 1 - j)
+        for LINF in range(LINF_SWEEP_MIN, LINF_SWEEP_MAX):
+            coords = []
+            # construct LINF box by creating each edge (top, left, bottom, right)
+            imin, imax = max(i - LINF, 0), min(i + LINF, MAP_DIMENSIONS[0] - 1)
+            jmin, jmax = max(j - LINF, 0), min(j + LINF, MAP_DIMENSIONS[1] - 1)
+            if i - LINF >= 0:
+                coords.extend([(i - LINF, j_) for j_ in range(jmin, jmax + 1)])
+            if j - LINF >= 0:
+                coords.extend([(i_, j - LINF) for i_ in range(imin, imax + 1)])
+            if i + LINF < MAP_DIMENSIONS[0]:
+                coords.extend([(i + LINF, j_) for j_ in range(jmin, jmax + 1)])
+            if j + LINF < MAP_DIMENSIONS[1]:
+                coords.extend([(i_, j + LINF) for i_ in range(imin, imax + 1)])
+            # see if any of the coords are unexplored
+            for coord in coords:
+                assert is_valid_location(coord), "this iteration should only include valid coordinates"
+                if not self.checked_for_treasure[coord]:
+                    return coord
         raise Exception("Somehow every location on the map has been checked")
 
     # parse incoming information from both runners and other relayers
