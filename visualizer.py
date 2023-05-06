@@ -21,6 +21,10 @@ TREASURE_INDEX, ANIMAL_INDEX, RUNNER_INDEX, RELAYER_INDEX, BLANK_INDEX = [i for 
 
 color_map = ListedColormap(list(TERRAIN_COLOR_MAP.values()) + list(NON_TERRAIN_COLOR_MAP.values()), N = interval[1])
 
+(NROWS, NCOLS) = (1, 3)
+# plus one for the true game map
+assert NROWS * NCOLS == 1 + NUM_RELAYERS, "the plot dimensions must line up with the number of relayers"
+
 # helper function to create a 3x3 square with value val centered at loc
 def blot(map, loc, val):
     i, j = loc
@@ -44,14 +48,20 @@ class Visualizer:
         self.runner_attendance = 0
         self.relayer_attendance = 0
 
-        self.im = plt.imshow(self.base_map, cmap = color_map, vmin = 0, vmax = interval[1] - 1)
+        fig, self.axes = plt.subplots(nrows = NROWS, ncols = NCOLS, squeeze = False, figsize = (6 * NROWS, 6 * NCOLS))
+        self.axes[0, 0].set_title("True Game Map")
+        self.true_im = self.axes[0, 0].imshow(self.base_map, cmap = color_map, vmin = 0, vmax = interval[1] - 1, aspect = 'equal')
+        self.relayer_ims = []
+        # off by one to account for the true game map
+        for i in range(1, NUM_RELAYERS + 1):
+            im = self.axes[i // NCOLS, i % NCOLS].imshow(np.full(MAP_DIMENSIONS, BLANK_INDEX), cmap = color_map, 
+                                                           vmin = 0, vmax = interval[1] - 1, aspect = 'equal')
+            self.relayer_ims.append(im)
+            self.axes[i // NCOLS, i % NCOLS].set_title(f"Relayer {i-1}'s Map")
         plt.ion()
+        self.relayer_maps = [None] * NUM_RELAYERS
 
-        # used for cycling the displayed relayer map
-        self.curr_relayer_id = 0
-        self.curr_relayer_map = None
-
-    # construct base map with treasure and relayers which don't move
+    # helper function that constructs base map with fixed treasure and relayer locations
     def get_base_map(self):
         map = self.game_instance.terrain.copy()
         map = blot(map, self.game_instance.treasure, TREASURE_INDEX)
@@ -59,11 +69,20 @@ class Visualizer:
             map = blot(map, loc, RELAYER_INDEX)
         return map
 
+    # helper function that adds blots for animals to the map after getting animal info from the game
     def add_animals(self, map):
         for loc in self.game_instance.animal_locations:
             map = blot(map, loc, ANIMAL_INDEX)
         return map
 
+    # helper function that decodes list of terrain info and adds them to a blank map
+    def decode_map(self, terra):
+        map = np.full(MAP_DIMENSIONS, BLANK_INDEX, dtype = np.int8)
+        for (i, j, t) in terra:
+            map[i, j] = t
+        return map
+
+    # runs one step of the visualizer by updating plots and resetting state
     def one_step(self):
         assert len(self.runner_locations) == NUM_RUNNERS
 
@@ -73,14 +92,15 @@ class Visualizer:
         for loc in self.runner_locations:
             map = blot(map, loc, RUNNER_INDEX)
 
-        self.im.set_array(map)
+        self.true_im.set_data(map)
+        for i in range(NUM_RELAYERS):
+            self.relayer_ims[i].set_data(self.relayer_maps[i])
         plt.pause(0.01)
 
         # reset attendance and locations
         self.runner_attendance = 0
         self.relayer_attendance = 0
         self.runner_locations = []
-        self.curr_relayer_id = (self.curr_relayer_id + 1) % NUM_RELAYERS
 
     # a wrapper function for accepting sockets w/ selector
     def accept_wrapper(self, sock):
@@ -105,30 +125,24 @@ class Visualizer:
             self.runner_locations.append(eval(recv_data[1]))
         elif recv_data[0] == RELAYER_CODE:
             self.relayer_attendance += 1
-            # update our relayer data structures with passed info if relayer_id matches the current one we plot
+            # reconstruct relayer map with passed info
             _, id, treasure_location, animal_locations, terrains, known_runner_locations = recv_data
-            if id == self.curr_relayer_id:
-                map = self.decode_map(eval(terrains))
-                if eval(treasure_location):
-                    map = blot(map, treasure_location, TREASURE_INDEX)
-                for animal in eval(animal_locations):
-                    map = blot(map, animal, ANIMAL_INDEX)
-                for runner in eval(known_runner_locations):
-                    map = blot(map, runner, RUNNER_INDEX)
-                self.curr_relayer_map = map
+            map = self.decode_map(eval(terrains))
+            if eval(treasure_location):
+                map = blot(map, treasure_location, TREASURE_INDEX)
+            for animal in eval(animal_locations):
+                map = blot(map, animal, ANIMAL_INDEX)
+            for runner in eval(known_runner_locations):
+                map = blot(map, runner, RUNNER_INDEX)
+            self.relayer_maps[int(id)] = map
         else:
             raise Exception(f"Invalid data: {recv_data}")
 
         # once it has heard back from everyone, the visualizer should one step
         if self.runner_attendance == NUM_RUNNERS and self.relayer_attendance == NUM_RELAYERS:
-                self.one_step()
+            self.one_step()
         sock.send(MESSAGE_RECEIVED.encode("utf-8"))
 
-    def decode_map(self, terra):
-        map = np.full(MAP_DIMENSIONS, BLANK_INDEX, dtype = np.int8)
-        for (i, j, t) in terra:
-            map[i, j] = t
-        return map
 
 def main(seed):
     visualizer = Visualizer(seed)

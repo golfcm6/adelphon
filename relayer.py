@@ -28,8 +28,8 @@ class Relayer:
         self.sel = selectors.DefaultSelector()
         self.relayer_connections = []
         self.runner_connections = []
-        # both of these dictionaries use sockets (from self.runner_connections) as keys to make replying
-        # to runners easier
+        # both of these dictionaries use sockets (from self.runner_connections) as keys
+        #  to make it easier to reply to runners
         self.runner_within_range = dict()
         self.runner_locations = dict()
         # before relayers sync, this set only contains nearby runner locations
@@ -40,18 +40,9 @@ class Relayer:
         self.runner_was_here = np.full(MAP_DIMENSIONS, False)
 
         # socket for all runners to connect to
-        self.runner_facing_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.runner_facing_socket.bind((self.address, self.runner_facing_port))
-        self.runner_facing_socket.listen()
-        self.runner_facing_socket.setblocking(False)
-        self.sel.register(self.runner_facing_socket, selectors.EVENT_READ, data = None)
-
+        self.runner_facing_socket = self.listening_socket(self.runner_facing_port)
         # socket for higher id relayers to connect to
-        self.relayer_facing_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.relayer_facing_socket.bind((self.address, self.relayer_facing_port))
-        self.relayer_facing_socket.listen()
-        self.relayer_facing_socket.setblocking(False)
-        self.sel.register(self.relayer_facing_socket, selectors.EVENT_READ, data = None)
+        self.relayer_facing_socket = self.listening_socket(self.relayer_facing_port)
 
         # connect to lower id relayers
         self.lower_relayer_sockets = [socket.socket(socket.AF_INET, socket.SOCK_STREAM) for _ in range(id)]
@@ -65,6 +56,15 @@ class Relayer:
 
         self.game_instance = Game(seed)
         self.location = self.game_instance.relayer_locations
+
+    # helper function to create and register a listening socket at the given port
+    def listening_socket(self, port):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind((self.address, port))
+        sock.listen()
+        sock.setblocking(False)
+        self.sel.register(sock, selectors.EVENT_READ, data = None)
+        return sock
 
     # a wrapper function for accepting sockets w/ selector
     def accept_wrapper(self, sock):
@@ -109,8 +109,7 @@ class Relayer:
                 elif recv_data[0] == RELAYER_CODE:
                     self.parse_info(recv_data)
                     self.relayer_attendance += 1
-                    # similarly once we've heard from all other relayers, we can dispatch info back to
-                    # nearby runners
+                    # similarly once we've heard from all other relayers, we can dispatch info back to nearby runners
                     if self.relayer_attendance == NUM_RELAYERS - 1:
                         self.sync_runners()
                 else:
@@ -125,23 +124,27 @@ class Relayer:
     def sync_relayers(self):
         info = prepare_info(self.terrains, self.coords, self.animal_locations, self.treasure_location, 
                             RELAYER_CODE, self.id, self.current_runner_locations)
-        # use self.connections to send info to higher id relayers
-        for sock in self.relayer_connections:
+        # use self.relayer_connections to send info to higher id relayers
+        # and self.lower_relayer_sockets to send info to lower id relayers
+        for sock in (self.relayer_connections + self.lower_relayer_sockets):
             sock.send(info.encode("utf-8"))
-        # use self.lower_relayer_sockets to send info to lower id relayers
-        for i in range(len(self.lower_relayer_sockets)):
-            self.lower_relayer_sockets[i].send(info.encode("utf-8"))
 
     def sync_runners(self):
-        self.relayer_attendance = 0
-        self.runner_attendance = 0
         # send all of this relayer's knowledge to the visualizer
         terra = self.encode_map()
         data = RELAYER_CODE, self.id, self.treasure_location, self.animal_locations, terra, self.current_runner_locations
         info = "|".join([str(d) for d in data])
         self.visualizer_socket.sendall(info.encode("utf-8"))
+        # each relayer must wait for the visualizer to respond before actually letting the runners go ahead
         self.visualizer_socket.recv(len(MESSAGE_RECEIVED))
 
+        # reset info
+        self.relayer_attendance = 0
+        self.runner_attendance = 0
+        self.animal_locations = set()
+        self.current_runner_locations = set()
+
+        # respond to runners with relevant info
         for sock in self.runner_connections:
             if self.runner_within_range[sock]:
                 info = self.compile_info_for_runner(self.runner_locations[sock])
@@ -149,10 +152,7 @@ class Relayer:
             else:
                 sock.send(TOO_FAR_AWAY.encode("utf-8"))
 
-        # reset info after syncing
-        self.animal_locations = set()
-        self.current_runner_locations = set()
-
+    # encode terrain map by creating tuples for map positions that aren't blank
     def encode_map(self):
         map, coords = self.terrains.flatten().tolist(), self.coords.reshape(-1, 2).tolist()
         return [(*coord, terrain) for terrain, coord in zip(map, coords) if terrain != BLANK_INDEX]
@@ -171,7 +171,7 @@ class Relayer:
     def find_target(self, runner_location):
         if self.treasure_location is not None:
             return self.treasure_location
-        
+
         i, j = runner_location
         # iterate through grid positions near the runner by incrementing L1 norm
         # ideally we're using L2 norm, but this makes the iteration tractable
@@ -184,7 +184,7 @@ class Relayer:
                         return coord
         raise Exception("Somehow every location on the map has been checked")
 
-
+    # parse incoming information from both runners and other relayers
     def parse_info(self, data):
         code, id, location_info, treasure, animals, terrains = data
         if treasure:
