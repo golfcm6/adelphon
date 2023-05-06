@@ -9,7 +9,7 @@ from collections import OrderedDict
 from game import *
 
 NON_TERRAIN_COLOR_MAP = OrderedDict([
-    ('treasure', convert_color([60, 255, 0])),
+    ('treasure', convert_color([121, 245, 110])),
     ('animal', convert_color([237, 24, 17])),
     ('runner', convert_color([140, 14, 130])),
     ('relayer', convert_color([17, 237, 230])),
@@ -44,6 +44,9 @@ class Visualizer:
         self.runner_attendance = 0
         self.relayer_attendance = 0
 
+        self.im = plt.imshow(self.base_map, cmap = color_map, vmin = 0, vmax = interval[1] - 1)
+        plt.ion()
+
         # used for cycling the displayed relayer map
         self.curr_relayer_id = 0
         self.curr_relayer_map = None
@@ -69,6 +72,9 @@ class Visualizer:
         map = self.add_animals(self.base_map.copy())
         for loc in self.runner_locations:
             map = blot(map, loc, RUNNER_INDEX)
+
+        self.im.set_array(map)
+        plt.pause(0.01)
 
         # reset attendance and locations
         self.runner_attendance = 0
@@ -126,14 +132,16 @@ class Visualizer:
 
 def main(seed):
     visualizer = Visualizer(seed)
-    while True:
-        events = visualizer.sel.select(timeout=None)
-        for key, _ in events:
-            if key.data is None:
-                visualizer.accept_wrapper(key.fileobj)
-            else:
-                visualizer.service_connection(key)
-
+    try:
+        while True:
+            events = visualizer.sel.select(timeout=None)
+            for key, _ in events:
+                if key.data is None:
+                    visualizer.accept_wrapper(key.fileobj)
+                else:
+                    visualizer.service_connection(key)
+    except KeyboardInterrupt:
+        sys.exit()
 
 if __name__ == '__main__':
     assert len(sys.argv) == 2, "This program only takes the required argument seed"

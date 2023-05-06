@@ -34,7 +34,7 @@ WAIT_TIME_MAP_INVERSE = {v:k for k,v in WAIT_TIME_MAP.items()}
 
 TERRAIN_COLOR_MAP = OrderedDict([
     (Terrain.FLAT_GROUND, convert_color([14, 87, 20])),
-    (Terrain.ROCKS, convert_color([46, 46, 46])),
+    (Terrain.ROCKS, convert_color([41, 40, 40])),
     (Terrain.MUD, convert_color([69, 39, 6])),
     (Terrain.QUICKSAND, convert_color([237, 204, 85]))
 ])

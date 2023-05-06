@@ -226,13 +226,16 @@ class Relayer:
 def main(seed, id):
     assert id < NUM_RELAYERS, "invalid id"
     relayer = Relayer(seed, id)
-    while True:
-        events = relayer.sel.select(timeout=None)
-        for key, _ in events:
-            if key.data is None:
-                relayer.accept_wrapper(key.fileobj)
-            else:
-                relayer.service_connection(key)
+    try:
+        while True:
+            events = relayer.sel.select(timeout=None)
+            for key, _ in events:
+                if key.data is None:
+                    relayer.accept_wrapper(key.fileobj)
+                else:
+                    relayer.service_connection(key)
+    except KeyboardInterrupt:
+        sys.exit()
 
 if __name__ == '__main__':
     assert len(sys.argv) == 3, "This program takes 2 required arguments: seed and id"

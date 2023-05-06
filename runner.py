@@ -133,14 +133,17 @@ class Runner:
 
 def main(seed, id):
     runner = Runner(seed, id)
-    while True:
-        runner.one_step()
-        if not runner.alive:
-            print("runner " + str(runner.id) + " has died")
-            break
-        if runner.won:
-            print("runner " + str(runner.id) + " has won")
-            break
+    try:
+        while True:
+            runner.one_step()
+            if not runner.alive:
+                print("runner " + str(runner.id) + " has died")
+                break
+            if runner.won:
+                print("runner " + str(runner.id) + " has won")
+                break
+    except KeyboardInterrupt:
+        sys.exit()
 
 if __name__ == '__main__':
     assert len(sys.argv) == 3, "The runner program takes 2 required arguments: seed and id"
