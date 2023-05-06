@@ -12,33 +12,22 @@ from visualizer import BLANK_INDEX
 class Relayer:
     def __init__(self, seed, id):
         self.id = id
-        self.address = socket.gethostbyname(socket.gethostname())
+        self.game_instance = Game(seed)
 
+        # setup data structures that represent this relayer's knowledge
         self.treasure_location = None
-        # set of tuples (x,y)
-        self.animal_locations = set()
+        self.animal_locations = set() # set of tuples (x,y)
         # local game map with this relayer's knowledge of terrain
         self.terrains = np.full(MAP_DIMENSIONS, BLANK_INDEX, dtype=np.int8)
         self.coords = generate_coord_grid()
-        self.runner_attendance = 0
-        self.relayer_attendance = 0
 
+        # setup sockets for communication
+        self.address = socket.gethostbyname(socket.gethostname())
         self.runner_facing_port = PORT_START + id
         self.relayer_facing_port = PORT_START + NUM_RELAYERS + id
         self.sel = selectors.DefaultSelector()
         self.relayer_connections = []
         self.runner_connections = []
-        # both of these dictionaries use sockets (from self.runner_connections) as keys
-        #  to make it easier to reply to runners
-        self.runner_within_range = dict()
-        self.runner_locations = dict()
-        # before relayers sync, this set only contains nearby runner locations
-        # and after the sync, it contains all runners within range of any relayer
-        self.current_runner_locations = set()
-        # boolean array for whether a runner has gotten close enough to each grid position to check for treasure
-        self.checked_for_treasure = np.full(MAP_DIMENSIONS, False)
-        self.runner_was_here = np.full(MAP_DIMENSIONS, False)
-
         # socket for all runners to connect to
         self.runner_facing_socket = self.listening_socket(self.runner_facing_port)
         # socket for higher id relayers to connect to
@@ -54,8 +43,18 @@ class Relayer:
         self.visualizer_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.visualizer_socket.connect((self.address, VISUALIZER_PORT))
 
-        self.game_instance = Game(seed)
-        self.location = self.game_instance.relayer_locations
+        # setup data structures that help implement relayer logic
+        self.runner_attendance = 0
+        self.relayer_attendance = 0
+        # both of these dictionaries use sockets (from self.runner_connections) as keys
+        # to make it easier to reply to runners
+        self.runner_within_range = dict()
+        self.runner_locations = dict()
+        # before relayers sync, this set only contains nearby runner locations
+        # and after the sync, it contains all runners within range of any relayer
+        self.current_runner_locations = set()
+        # boolean array for whether a runner has gotten close enough to each grid position to check for treasure
+        self.checked_for_treasure = np.full(MAP_DIMENSIONS, False)
 
     # helper function to create and register a listening socket at the given port
     def listening_socket(self, port):
@@ -201,13 +200,7 @@ class Relayer:
             terrains = terrains.split('!')
             for terrain in terrains:
                 i, j, terrain_type = eval(terrain)
-                if self.terrains[i][j] == BLANK_INDEX:
-                    self.terrains[i][j] = terrain_type
-                else:
-                    if self.terrains[i][j] != terrain_type:
-                        # TODO: anomaly/liar
-                        pass
-                    
+                self.terrains[i][j] = terrain_type
         # update checked_for_treasure grid based on runner location 
         # mark all tiles within TREASURE_RADIUS as True
         if location_info:
@@ -215,7 +208,6 @@ class Relayer:
             for location in locations:
                 i, j = eval(location)
                 self.current_runner_locations.add((i, j))
-                self.runner_was_here[i, j] = True
                 for i2 in range(i - TREASURE_RADIUS, i + TREASURE_RADIUS + 1):
                     for j2 in range(j - TREASURE_RADIUS, j + TREASURE_RADIUS + 1):
                         if is_valid_location((i2, j2)) and distance((i, j), (i2, j2)) <= TREASURE_RADIUS:

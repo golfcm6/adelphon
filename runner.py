@@ -40,7 +40,7 @@ class Runner:
         # game is over for this runner
         if not self.alive or self.won:
             return
-        
+
         # potentially start waiting if you're not already waiting
         if self.wait_time == 0:
             self.wait_time = game_state.wait_time
@@ -60,46 +60,29 @@ class Runner:
         self.visualizer_socket.recv(len(MESSAGE_RECEIVED))
     
         # logic for receiving relayer responses
-        received_response = False
+        already_received_response = False
         for i in range(NUM_RELAYERS):
             recv_data = self.sockets[i].recv(RUNNER_TRANSMISSION_SIZE_LIMIT)
             if not recv_data:
                 raise ConnectionError(f"Lost connection to relayer {i}")
             data = recv_data.decode("utf-8")
-            # too far away message should only ever be echoed i.e. you shouldn't ever hear it from a relayer
-            # that is close enough
+            # too far away message should only ever be echoed i.e. you shouldn't ever hear
+            #  it from a relayer that is close enough
             if data == TOO_FAR_AWAY:
                 assert distance(self.game_instance.relayer_locations[i], self.location) > COMM_RADIUS
-            
-            # this is case of relayer in range but you've already listened to another relayer
-            # would put the logic for check if multiple relayers have same content/are lying here
-            elif received_response:
-                pass
-
-            # first relayer response with data
-            else:
-                received_response = True
+            elif not already_received_response:
+                already_received_response = True
                 _, relayer_treasure, relayer_target, relayer_animals, relayer_terrain = data.split("|")
-                # update internal understanding from relayer info
-
-                # updated treasure_location, but also target_location will be treasure
-                if relayer_treasure != "":
+                # parse treasure and terrain info from relayer; TODO: parse animal info in Dijkstra's
+                if relayer_treasure:
                     self.treasure_location = eval(relayer_treasure)
-
-                # parse relayer_terrain and update internal terrain map (copy relayer map)
                 if relayer_terrain:
                     relayer_terrain = relayer_terrain.split('!')
                     for terrain in relayer_terrain:
                         i, j, terrain_type = eval(terrain)
-                        if self.terrains[i][j] == -1:
-                            self.terrains[i][j] = terrain_type
-                        else:
-                            if self.terrains[i][j] != terrain_type:
-                                # TODO: anomaly/liar
-                                pass
+                        self.terrains[i][j] = terrain_type
 
                 # MOVE STRATEGY V0 (simple)
-                #TODO: logic to make use of relayer_id if detects lie from a relayer
                 # find the adjacent square that is closest to being in line with the target
                 x, y = self.location
                 target_x, target_y = eval(relayer_target)
@@ -122,7 +105,7 @@ class Runner:
                     proposed_loc = apply_move(self.location, move)
 
         # if not in range of any relayer, make a move based on your own view
-        if not received_response:
+        if not already_received_response:
             valid = False
             while not valid:
                 theta = np.random.randint(8) * (np.pi / 4)
