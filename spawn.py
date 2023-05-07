@@ -24,6 +24,7 @@ def main(seed):
     sock.close()
 
     # explicitly pass keyboard interrupt to spawned processes
+    # note that visualizer will take care of killing the spawning process when game is over
     while True:
         try:
             pass

@@ -1,4 +1,5 @@
 import sys
+import os, signal
 import socket
 import selectors
 import types
@@ -48,6 +49,7 @@ class Visualizer:
         self.runner_attendance = 0
         self.runner_count = NUM_RUNNERS
         self.relayer_attendance = 0
+        self.won = False
 
         # setup plotting
         fig, self.axes = plt.subplots(ncols = 2, figsize = (12, 6))
@@ -124,16 +126,16 @@ class Visualizer:
             if len(recv_data) == 3:
                 msg = recv_data[2]
                 if msg == IM_DEAD:
-                    # close socket for this runner
-                    self.sel.unregister(sock)
-                    sock.close()
+                    is_dead_runner = True
                     self.runner_count -= 1
                     if self.runner_count == 0:
                         print("GAME OVER: All runners have died")
+                        # kill the parent (spawning process) and the visualizer itself
+                        os.kill(os.getppid(), signal.SIGKILL)
                         sys.exit() # GAME OVER
-                    is_dead_runner = True
                 elif msg == I_WON:
-                    sys.exit() # GAME OVER
+                    self.runner_attendance += 1
+                    self.won = True # GAME OVER but wait to let all runners know before killing this process
                 else:
                     raise ValueError(f"Invalid msg: {msg}")
             # standard runner case
@@ -157,10 +159,17 @@ class Visualizer:
         # once it has heard back from everyone, the visualizer should one step
         if self.runner_attendance == self.runner_count and self.relayer_attendance == NUM_RELAYERS:
             self.one_step()
-        # respond back to all relayers and living runners
-        if not is_dead_runner:
-            sock.send(MESSAGE_RECEIVED.encode("utf-8"))
-
+        # respond back to all relayers and runners
+        sock.send(MESSAGE_RECEIVED.encode("utf-8"))
+        # close socket for this runner
+        if is_dead_runner:
+            self.sel.unregister(sock)
+            sock.close()
+        # kill the parent (spawning process) and the visualizer itself
+        # after you've heard from and responded to all runners
+        if self.runner_attendance == self.runner_count and self.won:
+            os.kill(os.getppid(), signal.SIGTERM)
+            sys.exit()
 
 def main(seed):
     visualizer = Visualizer(seed)

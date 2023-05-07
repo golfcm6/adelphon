@@ -40,12 +40,13 @@ class Runner:
         self.alive = game_state.alive
         self.won = game_state.won
 
-        # game is over for this runner, tell all relayers you've died/have won
+        # game is over for this runner, tell all relayers and visualizer you've died/have won
         if not self.alive or self.won:
             msg = '|'.join([RUNNER_CODE, str(self.id), (I_WON if self.won else IM_DEAD)])
             for i in range(NUM_RELAYERS):
                 self.sockets[i].send(msg.encode('utf-8'))
             self.visualizer_socket.send(msg.encode('utf-8'))
+            self.visualizer_socket.recv(len(MESSAGE_RECEIVED))
             return
 
         # potentially start waiting if you're not already waiting
@@ -73,9 +74,13 @@ class Runner:
             if not recv_data:
                 raise ConnectionError(f"Lost connection to relayer {i}")
             data = recv_data.decode("utf-8")
+
+            # exit once you've heard that you've won from a relayer
+            if data == WE_WON:
+                sys.exit()
             # too far away message should only ever be echoed i.e. you shouldn't ever hear
             #  it from a relayer that is close enough
-            if data == TOO_FAR_AWAY:
+            elif data == TOO_FAR_AWAY:
                 assert distance(self.game_instance.relayer_locations[i], self.location) > COMM_RADIUS
             elif not already_received_response:
                 already_received_response = True

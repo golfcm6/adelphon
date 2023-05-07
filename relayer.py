@@ -59,6 +59,7 @@ class Relayer:
         # boolean array for whether a runner has gotten close enough to each grid position to check for treasure
         self.checked_for_treasure = np.full(MAP_DIMENSIONS, False)
         self.phase = WAITING_FOR_RUNNERS
+        self.won = False
 
         # tell spawner that everything has been set up correctly
         alert_spawn_process()
@@ -110,9 +111,10 @@ class Relayer:
                             sock.close()
                             self.runner_count -= 1
                             if self.runner_count == 0:
-                                sys.exit() # GAME OVER
+                                sys.exit() # GAME OVER because all runners have died
                         elif msg == I_WON:
-                            sys.exit() # GAME OVER
+                            self.runner_attendance += 1
+                            self.won = True # GAME OVER but wait till relayer sync to exit gracefully
                         else:
                             raise ValueError(f"Invalid msg: {msg}")
                     # standard runner case
@@ -129,10 +131,11 @@ class Relayer:
                 else:
                     raise Exception(f"Invalid data: {recv_data}")
         else:
-            print(f"Closing connection to {sock}")
             self.sel.unregister(sock)
             sock.close()
-            raise ConnectionError
+            # this is fine if you've already won because the sys exits won't be perfectly in sync
+            if not self.won:
+                raise ConnectionError(f"Closing connection to {sock}")
         # sync with other relayers once you've heard back from all runners
         if self.runner_attendance == self.runner_count and self.phase == WAITING_FOR_RUNNERS:
             self.sync_with_relayers()
@@ -144,6 +147,11 @@ class Relayer:
 
     # share info with other relayers
     def sync_with_relayers(self):
+        if self.won:
+            # tell all runners that the game has been won, then exit
+            for runner in self.runner_connections:
+                runner.send(WE_WON.encode("utf-8"))
+            sys.exit()
         info = prepare_info(self.terrains, self.coords, self.animal_locations, self.treasure_location, 
                             RELAYER_CODE, self.id, self.current_runner_locations)
         # use self.relayer_connections to send info to higher id relayers

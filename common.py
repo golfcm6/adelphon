@@ -10,14 +10,17 @@ RUNNER_TRANSMISSION_SIZE_LIMIT = 32
 RELAYER_TRANSMISSION_SIZE_LIMIT = 128
 VISUALIZER_TRANSMISSION_SIZE_LIMIT = 8092
 IM_UP = '19'
-MESSAGE_RECEIVED = '1000'
+MESSAGE_RECEIVED = '10'
 TOO_FAR_AWAY = '20'
 IM_DEAD = '7'
 I_WON = '91'
+WE_WON = '32'
 RUNNER_CODE = '0'
 RELAYER_CODE = '1'
 LINF_SWEEP_MIN = 1 # TODO: increase value to allow Dijkstra's to get around obstacles
 MAP_DIMENSIONS = (100, 100) # needs to be here to avoid circular import
+
+assert len(MESSAGE_RECEIVED) == len(WE_WON), "these messages need to be the same length for code simplicity"
 
 # helper function to find the distance between two points
 def distance(c1, c2):
