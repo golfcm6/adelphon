@@ -7,6 +7,7 @@ from matplotlib.colors import ListedColormap
 from collections import OrderedDict
 
 from game import *
+from common import alert_spawn_process
 
 NON_TERRAIN_COLOR_MAP = OrderedDict([
     ('treasure', convert_color([121, 245, 110])),
@@ -56,6 +57,9 @@ class Visualizer:
                                                            vmin = 0, vmax = interval[1] - 1, aspect = 'equal')
         self.axes[1].set_title("Total Relayer Knowledge")
         plt.ion()
+
+        # tell spawner that everything has been set up correctly
+        alert_spawn_process()
 
     # helper function that constructs base map with fixed treasure and relayer locations
     def get_base_map(self):

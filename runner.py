@@ -28,6 +28,9 @@ class Runner:
         self.visualizer_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.visualizer_socket.connect((self.address, VISUALIZER_PORT))
 
+        # tell spawner that everything has been set up correctly
+        alert_spawn_process()
+
     def one_step(self):
         if self.wait_time == 0:
             self.location = apply_move(self.location, self.direction)

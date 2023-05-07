@@ -60,6 +60,9 @@ class Relayer:
         self.checked_for_treasure = np.full(MAP_DIMENSIONS, False)
         self.phase = WAITING_FOR_RUNNERS
 
+        # tell spawner that everything has been set up correctly
+        alert_spawn_process()
+
     # helper function to create and register a listening socket at the given port
     def listening_socket(self, port):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

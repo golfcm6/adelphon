@@ -1,10 +1,15 @@
+import socket
 import numpy as np
 
+# starting port for relayer and runner facing sockets
 PORT_START = 50000
+# special ports for spawn process and visualizer process
 VISUALIZER_PORT = PORT_START - 1
+SPAWN_PORT = PORT_START - 2
 RUNNER_TRANSMISSION_SIZE_LIMIT = 32
 RELAYER_TRANSMISSION_SIZE_LIMIT = 128
 VISUALIZER_TRANSMISSION_SIZE_LIMIT = 8092
+IM_UP = '19'
 MESSAGE_RECEIVED = '1000'
 TOO_FAR_AWAY = '20'
 IM_DEAD = '7'
@@ -80,3 +85,11 @@ def prepare_info(terrains, coords, animals, treasure, sender_code, id, runner_lo
         relevant_info = relevant_info[:-1]
 
     return relevant_info
+
+# connects to spawn process to let it know that you're good to go
+# this prevents processes from getting ahead of each other and causing connection errors
+def alert_spawn_process():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect((socket.gethostbyname(socket.gethostname()), SPAWN_PORT))
+    sock.send(IM_UP.encode('utf-8'))
+    sock.close()
