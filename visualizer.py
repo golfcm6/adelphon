@@ -29,6 +29,7 @@ def blot(map, loc, val):
 
 class Visualizer:
     def __init__(self, seed):
+        print("Visualizer is up and visualizing")
         # setup sockets
         self.address = socket.gethostbyname(socket.gethostname())
         self.sel = selectors.DefaultSelector()
@@ -117,21 +118,18 @@ class Visualizer:
         if recv_data[0] == RUNNER_CODE:
             # special case for runner either dying or winning
             if len(recv_data) == 3:
-                _, id, msg = recv_data
+                msg = recv_data[2]
                 if msg == IM_DEAD:
                     # close socket for this runner
                     self.sel.unregister(sock)
                     sock.close()
                     self.runner_count -= 1
-                    # GAME OVER
                     if self.runner_count == 0:
                         print("GAME OVER: All runners have died")
-                        sys.exit()
+                        sys.exit() # GAME OVER
                     is_dead_runner = True
                 elif msg == I_WON:
-                    # logic for if runner has won
-                    print(f"Runner {id} has won the game of Adelphon!")
-                    sys.exit()
+                    sys.exit() # GAME OVER
                 else:
                     raise ValueError(f"Invalid msg: {msg}")
             # standard runner case
@@ -144,7 +142,7 @@ class Visualizer:
             _, id, treasure_location, animal_locations, terrains, known_runner_locations = recv_data
             self.add_terrain(eval(terrains))
             if eval(treasure_location):
-                self.relayer_map = blot(self.relayer_map, treasure_location, TREASURE_INDEX)
+                self.relayer_map = blot(self.relayer_map, eval(treasure_location), TREASURE_INDEX)
             for animal in eval(animal_locations):
                 self.relayer_map = blot(self.relayer_map, animal, ANIMAL_INDEX)
             for runner in eval(known_runner_locations):

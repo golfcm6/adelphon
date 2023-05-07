@@ -9,6 +9,7 @@ class Runner:
     def __init__(self, seed, id):
         self.id = id
         self.game_instance = Game(seed)
+        print(f"Runner {self.id} is up and running")
         self.alive = True
         self.won = False
         self.relayer_locations = []
@@ -123,10 +124,10 @@ def main(seed, id):
         while True:
             runner.one_step()
             if not runner.alive:
-                print("runner " + str(runner.id) + " has died")
+                print("Runner " + str(runner.id) + " has died")
                 break
             if runner.won:
-                print("runner " + str(runner.id) + " has won")
+                print("Runner " + str(runner.id) + " has won")
                 break
     except KeyboardInterrupt:
         sys.exit()

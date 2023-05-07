@@ -8,12 +8,14 @@ from game import *
 from common import *
 from visualizer import BLANK_INDEX
 
+WAITING_FOR_RUNNERS = 'a'
+WAITING_FOR_RELAYERS = 'b'
 
 class Relayer:
     def __init__(self, seed, id):
         self.id = id
         self.game_instance = Game(seed)
-
+        print(f"Relayer {self.id} is up and relaying")
         # setup data structures that represent this relayer's knowledge
         self.treasure_location = None
         self.animal_locations = set() # set of tuples (x,y)
@@ -56,6 +58,7 @@ class Relayer:
         self.current_runner_locations = set()
         # boolean array for whether a runner has gotten close enough to each grid position to check for treasure
         self.checked_for_treasure = np.full(MAP_DIMENSIONS, False)
+        self.phase = WAITING_FOR_RUNNERS
 
     # helper function to create and register a listening socket at the given port
     def listening_socket(self, port):
@@ -90,31 +93,23 @@ class Relayer:
             if recv_data == TOO_FAR_AWAY:
                 self.runner_within_range[sock] = False
                 self.runner_attendance += 1
-                # when we've heard from all runners, we can sync all of the relayers by sharing info
-                if self.runner_attendance == self.runner_count:
-                    self.sync_relayers()
             else:
                 recv_data = recv_data.split("|")
                 # runner message
                 if recv_data[0] == RUNNER_CODE:
                     # handle special case of the runner either dying or winning
                     if len(recv_data) == 3:
-                        _, id, msg = recv_data
+                        msg = recv_data[2]
                         if msg == IM_DEAD:
                             # close socket for this runner and remove them from active runner connections
                             self.runner_connections.remove(sock)
                             self.sel.unregister(sock)
                             sock.close()
                             self.runner_count -= 1
-                            # GAME OVER
                             if self.runner_count == 0:
-                                sys.exit()
-                            if self.runner_attendance == self.runner_count:
-                                self.sync_relayers()
+                                sys.exit() # GAME OVER
                         elif msg == I_WON:
-                            # logic for if runner has won
-                            print(f"Runner {id} has won the game of Adelphon!")
-                            sys.exit()
+                            sys.exit() # GAME OVER
                         else:
                             raise ValueError(f"Invalid msg: {msg}")
                     # standard runner case
@@ -124,15 +119,10 @@ class Relayer:
                         self.runner_locations[sock] = location
                         self.current_runner_locations.add(location)
                         self.runner_attendance += 1
-                        if self.runner_attendance == self.runner_count:
-                            self.sync_relayers()
                 # relayer message
                 elif recv_data[0] == RELAYER_CODE:
                     self.parse_info(recv_data)
                     self.relayer_attendance += 1
-                    # similarly once we've heard from all other relayers, we can dispatch info back to nearby runners
-                    if self.relayer_attendance == NUM_RELAYERS - 1:
-                        self.sync_runners()
                 else:
                     raise Exception(f"Invalid data: {recv_data}")
         else:
@@ -140,9 +130,17 @@ class Relayer:
             self.sel.unregister(sock)
             sock.close()
             raise ConnectionError
+        # sync with other relayers once you've heard back from all runners
+        if self.runner_attendance == self.runner_count and self.phase == WAITING_FOR_RUNNERS:
+            self.sync_with_relayers()
+            self.phase = WAITING_FOR_RELAYERS
+        # sync with runners once you've heard back from all other relayers
+        if self.relayer_attendance == (NUM_RELAYERS - 1) and self.phase == WAITING_FOR_RELAYERS:
+            self.sync_with_runners()
+            self.phase = WAITING_FOR_RUNNERS
 
     # share info with other relayers
-    def sync_relayers(self):
+    def sync_with_relayers(self):
         info = prepare_info(self.terrains, self.coords, self.animal_locations, self.treasure_location, 
                             RELAYER_CODE, self.id, self.current_runner_locations)
         # use self.relayer_connections to send info to higher id relayers
@@ -150,7 +148,7 @@ class Relayer:
         for sock in (self.relayer_connections + self.lower_relayer_sockets):
             sock.send(info.encode("utf-8"))
 
-    def sync_runners(self):
+    def sync_with_runners(self):
         # send all of this relayer's knowledge to the visualizer
         terra = self.encode_map()
         data = RELAYER_CODE, self.id, self.treasure_location, self.animal_locations, terra, self.current_runner_locations

@@ -7,7 +7,7 @@ from common import *
 
 NUM_ANIMALS = 5
 ANIMAL_RADIUS = 10
-KILL_RADIUS = 2
+KILL_RADIUS = 5
 TERRAIN_RANGE = 8 # side length of terrain block
 TREASURE_RADIUS = 2
 COMM_RADIUS = 40
@@ -99,7 +99,7 @@ class Game:
             return animal_loc, animal_movement
         # randomly change direction with some probability for the next move
         new_dir = animal_movement
-        if (np.random.rand() < ANIMAL_DIRECTION_CHANGE_PROB):
+        if np.random.rand() < ANIMAL_DIRECTION_CHANGE_PROB:
             while new_dir == animal_movement:
                 new_dir = self.random_movement_helper()
 
@@ -123,7 +123,7 @@ class Game:
 
     # randomly chooses magnitude of animal movement based on ANIMAL_RANGE
     def random_movement_helper(self):
-        return np.random.randint(-ANIMAL_RANGE, ANIMAL_RANGE), np.random.randint(-ANIMAL_RANGE, ANIMAL_RANGE)
+        return np.random.randint(-ANIMAL_RANGE, ANIMAL_RANGE + 1), np.random.randint(-ANIMAL_RANGE, ANIMAL_RANGE + 1)
 
     def generate_terrain_grid(self):
         ilim, jlim = MAP_DIMENSIONS
