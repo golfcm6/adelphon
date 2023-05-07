@@ -74,7 +74,6 @@ class Relayer:
             self.relayer_connections.append(conn)
         else:
             raise Exception("unrecognized socket")
-        print(f"Accepted connection from {addr, port}")
         conn.setblocking(False)
         events = selectors.EVENT_READ
         self.sel.register(conn, events, data = types.SimpleNamespace(port = port))
