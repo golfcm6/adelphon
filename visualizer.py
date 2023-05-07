@@ -44,7 +44,7 @@ class Visualizer:
         # setup game instance and related data structures
         self.game_instance = Game(seed)
         self.base_map = self.get_base_map()
-        self.relayer_map = np.full(MAP_DIMENSIONS, BLANK_INDEX)
+        self.relayer_map = self.get_relayer_base_map()
         self.runner_locations = []
         self.runner_attendance = 0
         self.runner_count = NUM_RUNNERS
@@ -55,7 +55,7 @@ class Visualizer:
         fig, self.axes = plt.subplots(ncols = 2, figsize = (12, 6))
         self.axes[0].set_title("True Game Map")
         self.true_im = self.axes[0].imshow(self.base_map, cmap = color_map, vmin = 0, vmax = interval[1] - 1, aspect = 'equal')
-        self.relayer_im = self.axes[1].imshow(np.full(MAP_DIMENSIONS, BLANK_INDEX), cmap = color_map, 
+        self.relayer_im = self.axes[1].imshow(self.relayer_map, cmap = color_map, 
                                                            vmin = 0, vmax = interval[1] - 1, aspect = 'equal')
         self.axes[1].set_title("Total Relayer Knowledge")
         plt.ion()
@@ -67,6 +67,12 @@ class Visualizer:
     def get_base_map(self):
         map = self.game_instance.terrain.copy()
         map = blot(map, self.game_instance.treasure, TREASURE_INDEX)
+        for loc in self.game_instance.relayer_locations:
+            map = blot(map, loc, RELAYER_INDEX)
+        return map
+    
+    def get_relayer_base_map(self):
+        map = np.full(MAP_DIMENSIONS, BLANK_INDEX)
         for loc in self.game_instance.relayer_locations:
             map = blot(map, loc, RELAYER_INDEX)
         return map
@@ -98,7 +104,7 @@ class Visualizer:
         plt.pause(0.01)
 
         # reset attendance and locations
-        self.relayer_map = np.full(MAP_DIMENSIONS, BLANK_INDEX)
+        self.relayer_map = self.get_relayer_base_map()
         self.runner_attendance = 0
         self.relayer_attendance = 0
         self.runner_locations = []

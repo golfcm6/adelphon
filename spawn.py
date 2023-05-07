@@ -1,4 +1,5 @@
 import sys
+import os
 import socket
 import subprocess, signal
 
@@ -23,15 +24,9 @@ def main(seed):
         wait_for_connection(sock, f"runner {i}")
     sock.close()
 
-    # explicitly pass keyboard interrupt to spawned processes
-    # note that visualizer will take care of killing the spawning process when game is over
+    # cycle so that you can accept KeyboardInterrupts and pass them down to child processes
     while True:
-        try:
-            pass
-        except KeyboardInterrupt:
-            for p in child_processes:
-                p.send_signal(signal.SIGINT)
-            sys.exit()
+        pass
 
 def wait_for_connection(sock, process_name):
     conn, _ = sock.accept()
@@ -40,5 +35,5 @@ def wait_for_connection(sock, process_name):
     conn.close()
 
 if __name__ == '__main__':
-    assert len(sys.argv) == 2, "This program takes in one required argument seeds"
+    assert len(sys.argv) == 2, "This program takes in one required argument: seed"
     main(int(sys.argv[1]))
