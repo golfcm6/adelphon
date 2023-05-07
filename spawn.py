@@ -1,7 +1,8 @@
-from game import NUM_RELAYERS, NUM_RUNNERS
 import sys
-import subprocess
 import socket
+import subprocess, signal
+
+from game import NUM_RELAYERS, NUM_RUNNERS
 from common import SPAWN_PORT, IM_UP
 
 def main(seed):
@@ -11,15 +12,25 @@ def main(seed):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind((socket.gethostbyname(socket.gethostname()), SPAWN_PORT))
     sock.listen()
-    subprocess.Popen(["python", "visualizer.py", str(seed)])
+    child_processes = []
+    child_processes.append(subprocess.Popen(["python", "visualizer.py", str(seed)]))
     wait_for_connection(sock, "visualizer")
     for i in range(NUM_RELAYERS):
-        subprocess.Popen(["python", "relayer.py", str(seed), str(i)])
+        child_processes.append(subprocess.Popen(["python", "relayer.py", str(seed), str(i)]))
         wait_for_connection(sock, f"relayer {i}")
     for i in range(NUM_RUNNERS):
-        subprocess.Popen(["python", "runner.py", str(seed), str(i)])
+        child_processes.append(subprocess.Popen(["python", "runner.py", str(seed), str(i)]))
         wait_for_connection(sock, f"runner {i}")
     sock.close()
+
+    # explicitly pass keyboard interrupt to spawned processes
+    while True:
+        try:
+            pass
+        except KeyboardInterrupt:
+            for p in child_processes:
+                p.send_signal(signal.SIGINT)
+            sys.exit()
 
 def wait_for_connection(sock, process_name):
     conn, _ = sock.accept()
