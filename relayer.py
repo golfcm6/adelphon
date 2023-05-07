@@ -27,7 +27,7 @@ class Relayer:
         self.relayer_facing_port = PORT_START + NUM_RELAYERS + id
         self.sel = selectors.DefaultSelector()
         self.relayer_connections = []
-        self.runner_connections = []
+        self.runner_connections = set()
         # socket for all runners to connect to
         self.runner_facing_socket = self.listening_socket(self.runner_facing_port)
         # socket for higher id relayers to connect to
@@ -45,6 +45,7 @@ class Relayer:
 
         # setup data structures that help implement relayer logic
         self.runner_attendance = 0
+        self.runner_count = NUM_RUNNERS
         self.relayer_attendance = 0
         # both of these dictionaries use sockets (from self.runner_connections) as keys
         # to make it easier to reply to runners
@@ -69,7 +70,7 @@ class Relayer:
     def accept_wrapper(self, sock):
         conn, (addr, port) = sock.accept()
         if sock == self.runner_facing_socket:
-            self.runner_connections.append(conn)
+            self.runner_connections.add(conn)
         elif sock == self.relayer_facing_socket:
             self.relayer_connections.append(conn)
         else:
@@ -90,19 +91,41 @@ class Relayer:
                 self.runner_within_range[sock] = False
                 self.runner_attendance += 1
                 # when we've heard from all runners, we can sync all of the relayers by sharing info
-                if self.runner_attendance == NUM_RUNNERS:
+                if self.runner_attendance == self.runner_count:
                     self.sync_relayers()
             else:
                 recv_data = recv_data.split("|")
                 # runner message
                 if recv_data[0] == RUNNER_CODE:
-                    self.runner_within_range[sock] = True
-                    location = self.parse_info(recv_data)
-                    self.runner_locations[sock] = location
-                    self.current_runner_locations.add(location)
-                    self.runner_attendance += 1
-                    if self.runner_attendance == NUM_RUNNERS:
-                        self.sync_relayers()
+                    # handle special case of the runner either dying or winning
+                    if len(recv_data) == 3:
+                        _, id, msg = recv_data
+                        if msg == IM_DEAD:
+                            # close socket for this runner and remove them from active runner connections
+                            self.runner_connections.remove(sock)
+                            self.sel.unregister(sock)
+                            sock.close()
+                            self.runner_count -= 1
+                            # GAME OVER
+                            if self.runner_count == 0:
+                                sys.exit()
+                            if self.runner_attendance == self.runner_count:
+                                self.sync_relayers()
+                        elif msg == I_WON:
+                            # logic for if runner has won
+                            print(f"Runner {id} has won the game of Adelphon!")
+                            sys.exit()
+                        else:
+                            raise ValueError(f"Invalid msg: {msg}")
+                    # standard runner case
+                    else:
+                        self.runner_within_range[sock] = True
+                        location = self.parse_info(recv_data)
+                        self.runner_locations[sock] = location
+                        self.current_runner_locations.add(location)
+                        self.runner_attendance += 1
+                        if self.runner_attendance == self.runner_count:
+                            self.sync_relayers()
                 # relayer message
                 elif recv_data[0] == RELAYER_CODE:
                     self.parse_info(recv_data)

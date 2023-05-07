@@ -36,8 +36,12 @@ class Runner:
         self.alive = game_state.alive
         self.won = game_state.won
 
-        # game is over for this runner
+        # game is over for this runner, tell all relayers you've died/have won
         if not self.alive or self.won:
+            msg = '|'.join([RUNNER_CODE, str(self.id), (I_WON if self.won else IM_DEAD)])
+            for i in range(NUM_RELAYERS):
+                self.sockets[i].send(msg.encode('utf-8'))
+            self.visualizer_socket.send(msg.encode('utf-8'))
             return
 
         # potentially start waiting if you're not already waiting

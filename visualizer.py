@@ -44,6 +44,7 @@ class Visualizer:
         self.relayer_map = np.full(MAP_DIMENSIONS, BLANK_INDEX)
         self.runner_locations = []
         self.runner_attendance = 0
+        self.runner_count = NUM_RUNNERS
         self.relayer_attendance = 0
 
         # setup plotting
@@ -76,7 +77,7 @@ class Visualizer:
 
     # runs one step of the visualizer by updating plots and resetting state
     def one_step(self):
-        assert len(self.runner_locations) == NUM_RUNNERS
+        assert len(self.runner_locations) == self.runner_count
 
         # make call to update animals directly since the visualizer isn't querying the map like the runners
         self.game_instance.update_animals()
@@ -105,16 +106,38 @@ class Visualizer:
     # process incoming data from a connection
     def service_connection(self, key):
         assert self.relayer_attendance <= NUM_RELAYERS
-        assert self.runner_attendance <= NUM_RUNNERS
+        assert self.runner_attendance <= self.runner_count
         sock = key.fileobj
         data = key.data
         recv_data = sock.recv(VISUALIZER_TRANSMISSION_SIZE_LIMIT)
         if not recv_data:
             raise ConnectionError(f"Lost connection to socket on port {data.port}")
         recv_data = recv_data.decode("utf-8").split("|")
+        is_dead_runner = False
         if recv_data[0] == RUNNER_CODE:
-            self.runner_attendance += 1
-            self.runner_locations.append(eval(recv_data[1]))
+            # special case for runner either dying or winning
+            if len(recv_data) == 3:
+                _, id, msg = recv_data
+                if msg == IM_DEAD:
+                    # close socket for this runner
+                    self.sel.unregister(sock)
+                    sock.close()
+                    self.runner_count -= 1
+                    # GAME OVER
+                    if self.runner_count == 0:
+                        print("GAME OVER: All runners have died")
+                        sys.exit()
+                    is_dead_runner = True
+                elif msg == I_WON:
+                    # logic for if runner has won
+                    print(f"Runner {id} has won the game of Adelphon!")
+                    sys.exit()
+                else:
+                    raise ValueError(f"Invalid msg: {msg}")
+            # standard runner case
+            else:
+                self.runner_attendance += 1
+                self.runner_locations.append(eval(recv_data[1]))
         elif recv_data[0] == RELAYER_CODE:
             self.relayer_attendance += 1
             # add current relayer's info to the master relayer map for this time step
@@ -130,9 +153,11 @@ class Visualizer:
             raise Exception(f"Invalid data: {recv_data}")
 
         # once it has heard back from everyone, the visualizer should one step
-        if self.runner_attendance == NUM_RUNNERS and self.relayer_attendance == NUM_RELAYERS:
+        if self.runner_attendance == self.runner_count and self.relayer_attendance == NUM_RELAYERS:
             self.one_step()
-        sock.send(MESSAGE_RECEIVED.encode("utf-8"))
+        # respond back to all relayers and living runners
+        if not is_dead_runner:
+            sock.send(MESSAGE_RECEIVED.encode("utf-8"))
 
 
 def main(seed):
