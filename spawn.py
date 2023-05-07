@@ -4,9 +4,9 @@ import socket
 import subprocess, signal
 
 from game import NUM_RELAYERS, NUM_RUNNERS
-from common import SPAWN_PORT, IM_UP
+from common import SPAWN_PORT, IM_UP, DEFAULT_SEED
 
-def main(seed):
+def main(seed=DEFAULT_SEED):
     # wait for a connection from each process before spawning the next one
     # each connection will be at the end of the process's init function
     # this will prevent processes from getting ahead of each other and causing connection errors
@@ -35,5 +35,8 @@ def wait_for_connection(sock, process_name):
     conn.close()
 
 if __name__ == '__main__':
-    assert len(sys.argv) == 2, "This program takes in one required argument: seed"
-    main(int(sys.argv[1]))
+    # seed is optional, has default
+    if len(sys.argv) == 2:
+        main(int(sys.argv[1]))
+    else:
+        main()

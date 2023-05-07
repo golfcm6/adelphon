@@ -19,6 +19,7 @@ RUNNER_CODE = '0'
 RELAYER_CODE = '1'
 LINF_SWEEP_MIN = 1 # TODO: increase value to allow Dijkstra's to get around obstacles
 MAP_DIMENSIONS = (100, 100) # needs to be here to avoid circular import
+DEFAULT_SEED = 12345
 
 assert len(MESSAGE_RECEIVED) == len(WE_WON), "these messages need to be the same length for code simplicity"
 
