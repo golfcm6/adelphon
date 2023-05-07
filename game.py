@@ -54,7 +54,7 @@ class Game:
         np.random.seed(seed)
         # relayers must be evenly spaced around map
         # TODO: possibly change this to be spread out grid of people
-        self.relayer_locations = [self.random_coord_helper() for _ in range(NUM_RELAYERS)]
+        self.relayer_locations = self.relayer_init()
         self.runner_start_locations = [self.random_coord_helper() for _ in range(NUM_RUNNERS)]
         self.animal_locations = tuple(self.random_coord_helper() for _ in range(NUM_ANIMALS))
         self.animal_movements = tuple(self.random_movement_helper() for _ in range(NUM_ANIMALS))
@@ -145,3 +145,20 @@ class Game:
                 else:
                     terra[i, j] = np.random.choice(len(Terrain), p = TERRAIN_PROBABILITIES)
         return terra
+
+    def relayer_init(self):
+        ratio = MAP_DIMENSIONS[0] / MAP_DIMENSIONS[1]
+        assert ratio >= 0.8 and ratio <= 1.2, \
+            "The ratio of the side lengths should be somewhat close to 1 for this init method to be reasonable"
+        relayer_locations = []
+        n = int(np.sqrt(NUM_RELAYERS)) # we're imposing an n x n grid over map
+        s1, s2 = MAP_DIMENSIONS[0] / n, MAP_DIMENSIONS[1] / n
+        for i in range(n):
+            for j in range(n):
+                # randomly generate the relayer inside corresponding grid cell
+                x = np.random.randint(int(s1 * i), int(s1 * (i + 1)))
+                y = np.random.randint(int(s2 * j), int(s2 * (j + 1)))
+                relayer_locations.append((x, y))
+        # randomly choose coordinates for extra positions
+        relayer_locations.extend([self.random_coord_helper() for _ in range(NUM_RELAYERS - n ** 2)])
+        return relayer_locations

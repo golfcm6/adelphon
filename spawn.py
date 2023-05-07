@@ -3,10 +3,10 @@ import sys
 import subprocess
 import time
 
-PAUSE = 0.1 # need to wait a little between process starts to allow init calls to run
+PAUSE = 0.3 # need to wait a little between process starts to allow init calls to run
 
 def main(seed):
-    p = subprocess.Popen(["python", "visualizer.py", str(seed)])
+    subprocess.Popen(["python", "visualizer.py", str(seed)])
     for i in range(NUM_RELAYERS):
         time.sleep(PAUSE)
         subprocess.Popen(["python", "relayer.py", str(seed), str(i)])
