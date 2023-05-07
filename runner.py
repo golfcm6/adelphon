@@ -28,7 +28,6 @@ class Runner:
         self.visualizer_socket.connect((self.address, VISUALIZER_PORT))
 
     def one_step(self):
-        print(self.location)
         if self.wait_time == 0:
             self.location = apply_move(self.location, self.direction)
 

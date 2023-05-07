@@ -21,7 +21,7 @@ TREASURE_INDEX, ANIMAL_INDEX, RUNNER_INDEX, RELAYER_INDEX, BLANK_INDEX = [i for 
 
 color_map = ListedColormap(list(TERRAIN_COLOR_MAP.values()) + list(NON_TERRAIN_COLOR_MAP.values()), N = interval[1])
 
-(NROWS, NCOLS) = (1, 3)
+(NROWS, NCOLS) = (2, 3)
 # plus one for the true game map
 assert NROWS * NCOLS == 1 + NUM_RELAYERS, "the plot dimensions must line up with the number of relayers"
 

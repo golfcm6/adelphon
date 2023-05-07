@@ -181,13 +181,13 @@ class Relayer:
             imin, imax = max(i - LINF, 0), min(i + LINF, MAP_DIMENSIONS[0] - 1)
             jmin, jmax = max(j - LINF, 0), min(j + LINF, MAP_DIMENSIONS[1] - 1)
             if i - LINF >= 0:
-                coords.extend([(i - LINF, j_) for j_ in range(jmin, jmax + 1)])
+                coords.extend([(i - LINF, j_) for j_ in range(jmin, jmax + 1)]) # top
             if j - LINF >= 0:
-                coords.extend([(i_, j - LINF) for i_ in range(imin, imax + 1)])
+                coords.extend([(i_, j - LINF) for i_ in range(imin, imax + 1)]) # left
             if i + LINF < MAP_DIMENSIONS[0]:
-                coords.extend([(i + LINF, j_) for j_ in range(jmin, jmax + 1)])
+                coords.extend([(i + LINF, j_) for j_ in range(jmin, jmax + 1)]) # bottom
             if j + LINF < MAP_DIMENSIONS[1]:
-                coords.extend([(i_, j + LINF) for i_ in range(imin, imax + 1)])
+                coords.extend([(i_, j + LINF) for i_ in range(imin, imax + 1)]) # right
             # see if any of the coords are unexplored
             for coord in coords:
                 assert is_valid_location(coord), "this iteration should only include valid coordinates"
