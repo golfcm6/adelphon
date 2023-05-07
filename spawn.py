@@ -1,12 +1,12 @@
+import numpy as np
 import sys
-import os
 import socket
-import subprocess, signal
+import subprocess
 
 from game import NUM_RELAYERS, NUM_RUNNERS
-from common import SPAWN_PORT, IM_UP, DEFAULT_SEED
+from common import SPAWN_PORT, IM_UP
 
-def main(seed=DEFAULT_SEED):
+def main(seed):
     # wait for a connection from each process before spawning the next one
     # each connection will be at the end of the process's init function
     # this will prevent processes from getting ahead of each other and causing connection errors
@@ -35,8 +35,12 @@ def wait_for_connection(sock, process_name):
     conn.close()
 
 if __name__ == '__main__':
-    # seed is optional, has default
+    assert len(sys.argv) <= 2, \
+        "This program only takes in one optional argument: seed (a seed will be chosen randomly if not provided)"
     if len(sys.argv) == 2:
         main(int(sys.argv[1]))
     else:
-        main()
+        max_int = np.iinfo(np.int32).max
+        seed = np.random.randint(max_int)
+        print(f"This run uses the seed {seed}")
+        main(seed)

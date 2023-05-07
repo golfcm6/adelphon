@@ -52,8 +52,6 @@ LocalView = namedtuple("LocalView", ['terrain', 'animals', 'treasure'])
 class Game:
     def __init__(self, seed):
         np.random.seed(seed)
-        # relayers must be evenly spaced around map
-        # TODO: possibly change this to be spread out grid of people
         self.relayer_locations = self.relayer_init()
         self.runner_start_locations = [self.random_coord_helper() for _ in range(NUM_RUNNERS)]
         self.animal_locations = tuple(self.random_coord_helper() for _ in range(NUM_ANIMALS))
