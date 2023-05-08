@@ -17,3 +17,4 @@
 -   Runners must be within a communication radius in order to communicate with relayers: the radius is indicated by the large blue tinted circles around each relayer
 -   Treasure must fall within a small treasure radius in order for the runners to see it: the radius is indicated by the small purple tinted circles around each runner
 -   The game ends when either all runners have been killed or the treasure has been found
+-   Relayers cannot move, be killed, or get the treasure themselves, since they're perched up in trees to facilitate communication: they can however see nearby objects just like the runners can
