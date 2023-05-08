@@ -124,7 +124,13 @@ class Visualizer:
         data = key.data
         recv_data = sock.recv(VISUALIZER_TRANSMISSION_SIZE_LIMIT)
         if not recv_data:
-            raise ConnectionError(f"Lost connection to socket on port {data.port}")
+            if not self.won:
+                raise ConnectionError(f"Lost connection to socket on port {data.port}")
+            else:
+                # all good if you've already won since sys exits won't be perfectly in sync
+                self.sel.unregister(sock)
+                sock.close()
+                return
         recv_data = recv_data.decode("utf-8").split("|")
         is_dead_runner = False
         if recv_data[0] == RUNNER_CODE:

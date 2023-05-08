@@ -16,6 +16,10 @@ ANIMAL_DIRECTION_CHANGE_PROB = 0.15
 ANIMAL_STAGNATE_PROB = 0.2
 NUM_RELAYERS = 5
 NUM_RUNNERS = 8
+# we want to place relayers within some smaller square concentric to each grid block
+# this value determines how small that smaller square is relative to the grid block
+RELAYER_GRID_CENTER_RATIO = 0.5
+assert RELAYER_GRID_CENTER_RATIO > 0 and RELAYER_GRID_CENTER_RATIO <= 1
 
 class Terrain(Enum):
     FLAT_GROUND = 0
@@ -151,11 +155,12 @@ class Game:
         relayer_locations = []
         n = int(np.sqrt(NUM_RELAYERS)) # we're imposing an n x n grid over map
         s1, s2 = MAP_DIMENSIONS[0] / n, MAP_DIMENSIONS[1] / n
+        d = (1 - RELAYER_GRID_CENTER_RATIO) / 2 # offset to create a smaller square between [d, 1-d] instead of [0, 1]
         for i in range(n):
             for j in range(n):
                 # randomly generate the relayer inside corresponding grid cell
-                x = np.random.randint(int(s1 * i), int(s1 * (i + 1)))
-                y = np.random.randint(int(s2 * j), int(s2 * (j + 1)))
+                x = np.random.randint(int(s1 * (i + d)), int(s1 * (i + 1 - d)))
+                y = np.random.randint(int(s2 * (j + d)), int(s2 * (j + 1 - d)))
                 relayer_locations.append((x, y))
         # randomly choose coordinates for extra positions
         relayer_locations.extend([self.random_coord_helper() for _ in range(NUM_RELAYERS - n ** 2)])

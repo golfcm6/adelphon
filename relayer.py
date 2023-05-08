@@ -133,6 +133,7 @@ class Relayer:
         else:
             self.sel.unregister(sock)
             sock.close()
+            self.runner_connections.discard(sock) # won't throw an error if the socket isn't a runner sock
             # this is fine if you've already won because the sys exits won't be perfectly in sync
             if not self.won:
                 raise ConnectionError(f"Closing connection to {sock}")
@@ -149,8 +150,8 @@ class Relayer:
     def sync_with_relayers(self):
         if self.won:
             # tell all runners that the game has been won, then exit
-            for runner in self.runner_connections:
-                runner.send(WE_WON.encode("utf-8"))
+            for sock in self.runner_connections:
+                sock.send(WE_WON.encode("utf-8"))
             sys.exit()
         info = prepare_info(self.terrains, self.coords, self.animal_locations, self.treasure_location, 
                             RELAYER_CODE, self.id, self.current_runner_locations)
