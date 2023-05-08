@@ -5,6 +5,8 @@ import selectors
 import types
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
+import matplotlib.lines as mlines
+from matplotlib.patches import RegularPolygon
 from collections import OrderedDict
 
 from game import *
@@ -52,13 +54,47 @@ class Visualizer:
         self.won = False
 
         # setup plotting
-        fig, self.axes = plt.subplots(ncols = 2, figsize = (12, 6))
+        fig, self.axes = plt.subplots(ncols = 2, figsize = (12, 8))
+        plt.suptitle("Adelphon", fontsize = 28, y = 0.9)
         self.axes[0].set_title("True Game Map")
         self.true_im = self.axes[0].imshow(self.base_map, cmap = color_map, vmin = 0, vmax = interval[1] - 1, 
                                            aspect = 'equal', interpolation = 'none')
         self.relayer_im = self.axes[1].imshow(self.relayer_map, cmap = color_map, vmin = 0, vmax = interval[1] - 1, 
                                               aspect = 'equal', interpolation = 'none')
         self.axes[1].set_title("Total Relayer Knowledge")
+
+        # plot tinted circles to visualize varius radii
+        # need to reverse xy coords to fit matplotlib convention
+        comm_radius_circles = [plt.Circle(loc[::-1], COMM_RADIUS, facecolor = NON_TERRAIN_COLOR_MAP['relayer'],
+                               alpha = 0.3) for loc in self.game_instance.relayer_locations]
+        for circle in comm_radius_circles:
+            self.axes[0].add_artist(circle)
+        self.kill_radius_circles = [plt.Circle(loc[::-1], KILL_RADIUS, facecolor = NON_TERRAIN_COLOR_MAP['animal'],
+                                    alpha = 0.3) for loc in self.game_instance.animal_locations]
+        for circle in self.kill_radius_circles:
+            self.axes[0].add_artist(circle)
+        self.treasure_radius_circles = [plt.Circle(loc[::-1], TREASURE_RADIUS, facecolor = NON_TERRAIN_COLOR_MAP['runner'],
+                                        alpha = 0.3) for loc in self.game_instance.runner_start_locations]
+        for circle in self.treasure_radius_circles:
+            self.axes[0].add_artist(circle)
+
+        # treasure
+        hexagon = RegularPolygon(self.game_instance.treasure[::-1], 6, radius = 3, 
+                                     facecolor = NON_TERRAIN_COLOR_MAP['treasure'])
+        self.axes[0].add_artist(hexagon)
+
+        # legend
+        treasure = mlines.Line2D([], [], color = '#79F56E', marker = 'h', markersize = 5, label = 'Treasure')
+        animal = mlines.Line2D([], [], color = '#ED1811', marker = 's', markersize = 5, label = 'Animal')
+        runner = mlines.Line2D([], [], color = '#8C0E82', marker = 's', markersize = 5, label = 'Runner')
+        relayer = mlines.Line2D([], [], color = '#11EDE6', marker = 's', markersize = 5, label = 'Relayer')
+        flat_ground = mlines.Line2D([], [], color = '#0E5714', marker = 's', markersize = 5, label = 'Flat Ground')
+        rocks = mlines.Line2D([], [], color = '#292828', marker = 'D', markersize = 5, label = 'Rocks')
+        mud = mlines.Line2D([], [], color = '#452706', marker = 'D', markersize = 5, label = 'Mud')
+        quicksand = mlines.Line2D([], [], color = '#EDCC55', marker = 'D', markersize = 5, label = 'Quicksand')
+        blank = mlines.Line2D([], [], color = '#FFFFFF', marker = 'D', markersize = 5, label = 'Blank')
+        fig.legend(handles = [treasure, animal, runner, relayer, flat_ground, rocks, mud, quicksand, blank],
+                   title = "Legend", loc = 'lower right', bbox_to_anchor = (0.5, 0.5, 0.5, 0.5), fontsize = "9", fancybox = True)
         plt.ion()
 
         # tell spawner that everything has been set up correctly
@@ -67,7 +103,6 @@ class Visualizer:
     # helper function that constructs base map with fixed treasure and relayer locations
     def get_base_map(self):
         map = self.game_instance.terrain.copy()
-        map = blot(map, self.game_instance.treasure, TREASURE_INDEX)
         for loc in self.game_instance.relayer_locations:
             map = blot(map, loc, RELAYER_INDEX)
         return map
@@ -104,6 +139,12 @@ class Visualizer:
         # update plots
         self.true_im.set_data(map)
         self.relayer_im.set_data(self.relayer_map)
+        # update kill radius circles to stay centered at animal locations
+        for circle, loc in zip(self.kill_radius_circles, self.game_instance.animal_locations):
+            circle.set(center = loc[::-1])
+         # update treasure radius circles to stay centered at runner locations
+        for circle, loc in zip(self.treasure_radius_circles, self.runner_locations):
+            circle.set(center = loc[::-1])
         plt.pause(0.01)
 
         # reset attendance and locations
@@ -142,6 +183,10 @@ class Visualizer:
                 msg = recv_data[2]
                 if msg == IM_DEAD:
                     is_dead_runner = True
+                    id = int(recv_data[1])
+                    # remove a circle for dead runner
+                    self.treasure_radius_circles[-1].remove()
+                    self.treasure_radius_circles.pop()
                     self.runner_count -= 1
                     if self.runner_count == 0:
                         print("GAME OVER: All runners have died")
