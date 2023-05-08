@@ -54,9 +54,10 @@ class Visualizer:
         # setup plotting
         fig, self.axes = plt.subplots(ncols = 2, figsize = (12, 6))
         self.axes[0].set_title("True Game Map")
-        self.true_im = self.axes[0].imshow(self.base_map, cmap = color_map, vmin = 0, vmax = interval[1] - 1, aspect = 'equal')
-        self.relayer_im = self.axes[1].imshow(self.relayer_map, cmap = color_map, 
-                                                           vmin = 0, vmax = interval[1] - 1, aspect = 'equal')
+        self.true_im = self.axes[0].imshow(self.base_map, cmap = color_map, vmin = 0, vmax = interval[1] - 1, 
+                                           aspect = 'equal', interpolation = 'none')
+        self.relayer_im = self.axes[1].imshow(self.relayer_map, cmap = color_map, vmin = 0, vmax = interval[1] - 1, 
+                                              aspect = 'equal', interpolation = 'none')
         self.axes[1].set_title("Total Relayer Knowledge")
         plt.ion()
 
@@ -72,7 +73,7 @@ class Visualizer:
         return map
     
     def get_relayer_base_map(self):
-        map = np.full(MAP_DIMENSIONS, BLANK_INDEX)
+        map = np.full(MAP_DIMENSIONS, BLANK_INDEX, dtype=np.int8)
         for loc in self.game_instance.relayer_locations:
             map = blot(map, loc, RELAYER_INDEX)
         return map
