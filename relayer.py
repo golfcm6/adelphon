@@ -22,6 +22,7 @@ class Relayer:
         # local game map with this relayer's knowledge of terrain
         self.terrains = np.full(MAP_DIMENSIONS, BLANK_INDEX, dtype=np.int8)
         self.coords = generate_coord_grid()
+        self.location = self.game_instance.relayer_locations[self.id]
 
         # setup sockets for communication
         self.address = socket.gethostbyname(socket.gethostname())
@@ -153,6 +154,17 @@ class Relayer:
             for sock in self.runner_connections:
                 sock.send(WE_WON.encode("utf-8"))
             sys.exit()
+
+        # query the map and update state
+        game_state = self.game_instance.query(self.location, is_relayer = True)
+        # all other parts of game state are irrelevant for relayers
+        (terrains, coords), animals, treasure = game_state.local_view
+        if treasure:
+            self.treasure_location = treasure
+        self.animal_locations.update(animals)
+        i, j = coords[:,:,0], coords[:,:,1]
+        self.terrains[i, j] = terrains
+
         info = prepare_info(self.terrains, self.coords, self.animal_locations, self.treasure_location, 
                             RELAYER_CODE, self.id, self.current_runner_locations)
         # use self.relayer_connections to send info to higher id relayers

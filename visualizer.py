@@ -86,7 +86,9 @@ class Visualizer:
     # helper function that decodes list of terrain info and adds them to a blank map
     def add_terrain(self, terra):
         for (i, j, t) in terra:
-            self.relayer_map[i, j] = t
+            # only overwrite blank parts of the map because all game objects are more important than terrain
+            if self.relayer_map[i,j] == BLANK_INDEX:
+                self.relayer_map[i, j] = t
 
     # runs one step of the visualizer by updating plots and resetting state
     def one_step(self):
@@ -143,7 +145,7 @@ class Visualizer:
                     if self.runner_count == 0:
                         print("GAME OVER: All runners have died")
                         # kill the parent (spawning process) and the visualizer itself
-                        os.kill(os.getppid(), signal.SIGKILL)
+                        os.kill(os.getppid(), signal.SIGTERM)
                         sys.exit() # GAME OVER
                 elif msg == I_WON:
                     self.runner_attendance += 1

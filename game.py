@@ -66,14 +66,16 @@ class Game:
         runner_start_terrains = [Terrain(self.terrain[loc]) for loc in self.runner_start_locations]
         self.runner_start_wait_times = [WAIT_TIME_MAP[terrain] for terrain in runner_start_terrains]
 
-    def query(self, location):
-        if location == self.treasure:
-            return GameState(alive = True, won = True, wait_time = 0, local_view = None)  # treasure found and game won
+    def query(self, location, is_relayer):
+        # only runners can find treasure or get killed by animals
+        if not is_relayer:
+            if location == self.treasure:
+                return GameState(alive = True, won = True, wait_time = 0, local_view = None)  # treasure found and game won
 
-        for animal_location in self.animal_locations:
-            # death (killed by an animal)
-            if distance(location, animal_location) <= KILL_RADIUS:
-                return GameState(alive = False, won = False, wait_time = 0, local_view = None)
+            for animal_location in self.animal_locations:
+                # death (killed by an animal)
+                if distance(location, animal_location) <= KILL_RADIUS:
+                    return GameState(alive = False, won = False, wait_time = 0, local_view = None)
 
         # update animals on every timestep
         self.update_animals()
@@ -83,15 +85,15 @@ class Game:
         # decision: radius for treasure and animals, surrounding blocks (box) for terrain
 
         # give local terrain BOX with side length TERRAIN_RANGE
-        x, y = location
+        i, j = location
         half = TERRAIN_RANGE // 2
-        local_terrain = self.terrain[max(0, y - half) : y + half + 1, max(0, x - half) : x + half + 1]
-        local_coords = self.coords[max(0, y - half) : y + half + 1, max(0, x - half) : x + half + 1]
+        local_terrain = self.terrain[max(0, i - half) : i + half + 1, max(0, j - half) : j + half + 1]
+        local_coords = self.coords[max(0, i - half) : i + half + 1, max(0, j - half) : j + half + 1]
         local_animals = [animal for animal in self.animal_locations if distance(animal, location) <= ANIMAL_RADIUS]
         local_treasure = self.treasure if (distance(location, self.treasure) <= TREASURE_RADIUS) else None
 
         local_view = LocalView(terrain = (local_terrain, local_coords), animals = local_animals, treasure = local_treasure)
-        current_terrain = Terrain(self.terrain[x, y])
+        current_terrain = Terrain(self.terrain[i, j])
         return GameState(alive = True, won = False, wait_time = WAIT_TIME_MAP[current_terrain], local_view = local_view)
 
     # update one animal's location and movement pattern

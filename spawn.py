@@ -1,7 +1,8 @@
 import numpy as np
 import sys
 import socket
-import subprocess
+import subprocess, signal
+import time
 
 from game import NUM_RELAYERS, NUM_RUNNERS
 from common import SPAWN_PORT, IM_UP
@@ -28,6 +29,7 @@ def main(seed):
     while True:
         pass
 
+# helper function to wait for a single connection to the given socket
 def wait_for_connection(sock, process_name):
     conn, _ = sock.accept()
     if not conn.recv(len(IM_UP)):

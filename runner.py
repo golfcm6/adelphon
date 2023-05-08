@@ -36,7 +36,7 @@ class Runner:
             self.location = apply_move(self.location, self.direction)
 
         # query the game map and update your own state
-        game_state = self.game_instance.query(self.location)
+        game_state = self.game_instance.query(self.location, is_relayer = False)
         self.alive = game_state.alive
         self.won = game_state.won
 
