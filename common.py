@@ -17,7 +17,7 @@ I_WON = '91'
 WE_WON = '32'
 RUNNER_CODE = '0'
 RELAYER_CODE = '1'
-LINF_SWEEP_MIN = 1 # TODO: increase value to allow Dijkstra's to get around obstacles
+LINF_SWEEP_MIN = 2
 MAP_DIMENSIONS = (100, 100) # needs to be here to avoid circular import
 
 assert len(MESSAGE_RECEIVED) == len(WE_WON), "these messages need to be the same length for code simplicity"
@@ -31,6 +31,13 @@ def is_valid_location(location):
     x, y = location
     x_lim, y_lim = MAP_DIMENSIONS
     return (x >= 0 and x < x_lim) and (y >= 0 and y < y_lim)
+
+# clip location to be on the map
+def clip_location(location):
+    x, y = location
+    x_lim, y_lim = MAP_DIMENSIONS
+    # order of min, max is arbitrary
+    return (min(max(0, x), x_lim - 1), min(max(0, y), y_lim - 1))
 
 # return new location after applying move
 def apply_move(location, move):

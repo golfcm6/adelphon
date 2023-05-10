@@ -17,13 +17,13 @@ NON_TERRAIN_COLOR_MAP = OrderedDict([
     ('animal', convert_color([237, 24, 17])),
     ('runner', convert_color([140, 14, 130])),
     ('relayer', convert_color([17, 237, 230])),
-    ('blank', convert_color([255, 255, 255]))
 ])
-
+BLANK_COLOR = convert_color([255, 255, 255])
+BLANK_INDEX = -1
 interval = (len(Terrain), len(Terrain) + len(NON_TERRAIN_COLOR_MAP.keys()))
-TREASURE_INDEX, ANIMAL_INDEX, RUNNER_INDEX, RELAYER_INDEX, BLANK_INDEX = [i for i in range(*interval)]
+TREASURE_INDEX, ANIMAL_INDEX, RUNNER_INDEX, RELAYER_INDEX = [i for i in range(*interval)]
 
-color_map = ListedColormap(list(TERRAIN_COLOR_MAP.values()) + list(NON_TERRAIN_COLOR_MAP.values()), N = interval[1])
+color_map = ListedColormap([BLANK_COLOR, *TERRAIN_COLOR_MAP.values(), *NON_TERRAIN_COLOR_MAP.values()])
 
 # helper function to create a 3x3 square with value val centered at loc
 def blot(map, loc, val):
@@ -57,9 +57,9 @@ class Visualizer:
         fig, self.axes = plt.subplots(ncols = 2, figsize = (12, 8))
         plt.suptitle("Adelphon", fontsize = 28, y = 0.9)
         self.axes[0].set_title("True Game Map")
-        self.true_im = self.axes[0].imshow(self.base_map, cmap = color_map, vmin = 0, vmax = interval[1] - 1, 
+        self.true_im = self.axes[0].imshow(self.base_map, cmap = color_map, vmin = -1, vmax = interval[1] - 1, 
                                            aspect = 'equal', interpolation = 'none')
-        self.relayer_im = self.axes[1].imshow(self.relayer_map, cmap = color_map, vmin = 0, vmax = interval[1] - 1, 
+        self.relayer_im = self.axes[1].imshow(self.relayer_map, cmap = color_map, vmin = -1, vmax = interval[1] - 1, 
                                               aspect = 'equal', interpolation = 'none')
         self.axes[1].set_title("Total Relayer Knowledge")
 
@@ -130,8 +130,9 @@ class Visualizer:
     def one_step(self):
         assert len(self.runner_locations) == self.runner_count
 
-        # make call to update animals directly since the visualizer isn't querying the map like the runners
-        self.game_instance.update_animals()
+        # need to query so that visualizer's game instance is on the same page as the other game instances
+        # i.e. we just want the update side effects of querying
+        self.game_instance.query((0, 0), is_runner = False)
         map = self.add_animals(self.base_map.copy())
         for loc in self.runner_locations:
             map = blot(map, loc, RUNNER_INDEX)

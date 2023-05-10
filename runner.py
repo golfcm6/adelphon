@@ -1,9 +1,13 @@
 import sys
 import socket
 import numpy as np
+from queue import PriorityQueue
 
 from game import *
 from common import *
+from visualizer import BLANK_INDEX
+
+NEW_TARGET_RANGE = 8
 
 class Runner:
     def __init__(self, seed, id):
@@ -16,8 +20,11 @@ class Runner:
         self.location = self.game_instance.runner_start_locations[self.id]
         self.wait_time = self.game_instance.runner_start_wait_times[self.id]
         self.treasure_location = None
-        self.terrains = np.full(MAP_DIMENSIONS, -1, dtype=np.int8)
-        self.direction = (0, 0)
+        self.terrains = np.full(MAP_DIMENSIONS, BLANK_INDEX, dtype=np.int8)
+        self.next_location = self.location # initialized this way because of how runner logic sequence works
+        self.target_location = None
+        self.animal_locations = set()
+        self.been_here = np.full(MAP_DIMENSIONS, False)
 
         # socket setup
         self.address = socket.gethostbyname(socket.gethostname())
@@ -31,17 +38,68 @@ class Runner:
         # tell spawner that everything has been set up correctly
         alert_spawn_process()
 
-    def one_step(self):
-        if self.wait_time == 0:
-            self.location = apply_move(self.location, self.direction)
+    # helper function to get the weight for an edge (v, u)
+    # in this case it's just the wait time of v
+    def get_weight(self, v):
+        # add one because you always need one timestep to just get there
+        return (WAIT_TIME_MAP[Terrain(self.terrains[v])] if self.terrains[v] != BLANK_INDEX else 0) + 1
 
+    # helper function to find the valid neighbors of a vertex
+    def neighbors(self, vertex):
+        i, j = vertex
+        potential = [(i + di, j + dj) for di in range(-1, 2) for dj in range(-1, 2)]
+        return [pair for pair in potential if is_valid_location(pair) and pair != vertex]
+
+    # given edge weights and a target location, run Dijkstra's algorithm with current location as the source
+    def dijkstra(self):
+        assert self.location != self.target_location, f"{self.id}"
+        # init data structures
+        dists = dict()
+        dists[self.target_location] = 0
+        next = dict()
+        visited = set()
+        # note that we won't be deleting elements or overwriting priority
+        # instead we'll be skipping elements with stale priorities
+        # e.g. if (1, u) was added to the queue after (2, u), then we'll skip the second occurrence
+        # this is tracked via the set visited
+        queue = PriorityQueue()
+        queue.put((0, self.target_location))
+
+        while True:
+            u = queue.get()[1]
+            # skip stale entries
+            if u in visited:
+                continue
+            visited.add(u)
+            # we've constructed a path from our current location to the target location so we're done
+            if u == self.location:
+                assert next[self.location] in self.neighbors(self.location)
+                return next[self.location]
+            for v in self.neighbors(u):
+                if v not in visited:
+                    alt_dist = self.get_weight(v) + dists[u]
+                    if (v not in dists) or (alt_dist < dists[v]):
+                        dists[v] = alt_dist
+                        next[v] = u
+                        queue.put((alt_dist, v))
+
+    def one_step(self):
+        self.animal_locations = set() # reset set before getting new animal locations
+        if self.wait_time == 0:
+            self.location = self.next_location
+
+        self.been_here[self.location] = True
         # query the game map and update your own state
-        game_state = self.game_instance.query(self.location, is_relayer = False)
+        game_state = self.game_instance.query(self.location, is_runner = True)
         self.alive = game_state.alive
         self.won = game_state.won
 
         # game is over for this runner, tell all relayers and visualizer you've died/have won
-        if not self.alive or self.won:
+        if (not self.alive) or self.won:
+            if not self.alive:
+                print("Runner " + str(self.id) + " has died")
+            if self.won:
+                print("Runner " + str(self.id) + " has won")
             msg = '|'.join([RUNNER_CODE, str(self.id), (I_WON if self.won else IM_DEAD)])
             for i in range(NUM_RELAYERS):
                 self.sockets[i].send(msg.encode('utf-8'))
@@ -56,6 +114,11 @@ class Runner:
         else:
             self.wait_time -= 1
         (terrains, coords), animals, treasure = game_state.local_view
+        self.animal_locations.update(animals)
+        if treasure:
+            self.treasure_location = treasure
+        i, j = coords[:,:,0], coords[:,:,1]
+        self.terrains[i, j] = terrains
         relevant_info = prepare_info(terrains, coords, animals, treasure, RUNNER_CODE, self.id, [self.location])
 
         # send info to nearby relayers and a placeholder message to all others
@@ -84,58 +147,45 @@ class Runner:
                 assert distance(self.game_instance.relayer_locations[i], self.location) > COMM_RADIUS
             elif not already_received_response:
                 already_received_response = True
-                _, relayer_treasure, relayer_target, relayer_animals, relayer_terrain = data.split("|")
-                # parse treasure and terrain info from relayer; TODO: parse animal info in Dijkstra's
-                if relayer_treasure:
-                    self.treasure_location = eval(relayer_treasure)
-                if relayer_terrain:
-                    relayer_terrain = relayer_terrain.split('!')
-                    for terrain in relayer_terrain:
-                        i, j, terrain_type = eval(terrain)
+                _, treasure, target, animals, terrain = data.split("|")
+                # parse info from relayer
+                assert target, "relayer should always send a valid target"
+                target = eval(target)
+                # reject target locations you've already been to
+                if not self.been_here[target]:
+                    self.target_location = target
+                if animals:
+                    self.animal_locations.update([eval(a) for a in animals.split('!')])
+                if treasure:
+                    self.treasure_location = eval(treasure)
+                if terrain:
+                    for terra in terrain.split('!'):
+                        i, j, terrain_type = eval(terra)
                         self.terrains[i][j] = terrain_type
 
-                # MOVE STRATEGY V0 (simple)
-                # find the adjacent square that is closest to being in line with the target
-                x, y = self.location
-                target_x, target_y = eval(relayer_target)
-                theta = np.rint(np.arctan2(target_y - y, target_x - x) / (np.pi / 4)) * (np.pi / 4)
-                move = np.rint([np.cos(theta), np.sin(theta)]).astype(np.int8)
-                proposed_loc = apply_move(self.location, move)
-
-                # if quicksand or animal in move, try pi/4 counterclockwise - if all moves bad stay put
-                for _ in range(8):
-                    # find the distance to the nearest animal if there are any nearby
-                    if relayer_animals:
-                        min_dist = min(distance(eval(animal_loc), proposed_loc) for animal_loc in relayer_animals.split("!"))
-                    else:
-                        min_dist = KILL_RADIUS + 1
-                    if is_valid_location(proposed_loc) and min_dist > KILL_RADIUS and \
-                                        self.terrains[proposed_loc] != Terrain.QUICKSAND.value:
-                        break
-                    theta += (np.pi / 4)
-                    move = np.rint([np.cos(theta), np.sin(theta)]).astype(np.int8)
-                    proposed_loc = apply_move(self.location, move)
-
-        # if not in range of any relayer, make a move based on your own view
-        if not already_received_response:
-            valid = False
-            while not valid:
-                theta = np.random.randint(8) * (np.pi / 4)
-                move = np.rint([np.cos(theta), np.sin(theta)]).astype(np.int8)
-                valid = is_valid_location(apply_move(self.location, move))
-
-        self.direction = move
+        # only set a new target if you don't have one or if you're already there
+        if (not self.target_location) or (self.target_location == self.location):
+            i, j = self.location
+            new_target = self.location
+            # randomly go towards edges of map; retry in case you go off the map
+            while new_target == self.location:
+                options = [NEW_TARGET_RANGE, -NEW_TARGET_RANGE]
+                # random movement that's biased towards center if you're on edges and fair coin toss in middle
+                di = np.random.choice(options, p = np.array([MAP_DIMENSIONS[0] - 1 - i, i]) / (MAP_DIMENSIONS[0] - 1))
+                dj = np.random.choice(options, p = np.array([MAP_DIMENSIONS[1] - 1 - j, j]) / (MAP_DIMENSIONS[1] - 1))
+                new_target = clip_location((i + di, j + dj))
+            self.target_location = new_target
+        # target should always be treasure if you know where it is
+        if self.treasure_location:
+            self.target_location = self.treasure_location
+        self.next_location = self.dijkstra()
 
 def main(seed, id):
     runner = Runner(seed, id)
     try:
         while True:
             runner.one_step()
-            if not runner.alive:
-                print("Runner " + str(runner.id) + " has died")
-                break
-            if runner.won:
-                print("Runner " + str(runner.id) + " has won")
+            if (not runner.alive) or runner.won:
                 break
     except KeyboardInterrupt:
         sys.exit()

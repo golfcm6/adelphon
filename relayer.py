@@ -50,10 +50,11 @@ class Relayer:
         self.runner_attendance = 0
         self.runner_count = NUM_RUNNERS
         self.relayer_attendance = 0
-        # both of these dictionaries use sockets (from self.runner_connections) as keys
+        # these three dictionaries use sockets (from self.runner_connections) as keys
         # to make it easier to reply to runners
         self.runner_within_range = dict()
         self.runner_locations = dict()
+        self.existing_targets = dict()
         # before relayers sync, this set only contains nearby runner locations
         # and after the sync, it contains all runners within range of any relayer
         self.current_runner_locations = set()
@@ -156,7 +157,7 @@ class Relayer:
             sys.exit()
 
         # query the map and update state
-        game_state = self.game_instance.query(self.location, is_relayer = True)
+        game_state = self.game_instance.query(self.location, is_runner = False)
         # all other parts of game state are irrelevant for relayers
         (terrains, coords), animals, treasure = game_state.local_view
         if treasure:
@@ -190,7 +191,7 @@ class Relayer:
         # respond to runners with relevant info
         for sock in self.runner_connections:
             if self.runner_within_range[sock]:
-                info = self.compile_info_for_runner(self.runner_locations[sock])
+                info = self.compile_info_for_runner(sock)
                 sock.send(info.encode("utf-8"))
             else:
                 sock.send(TOO_FAR_AWAY.encode("utf-8"))
@@ -202,8 +203,8 @@ class Relayer:
 
     # info sent by relayer to a runner
     # convention: id|treasure|target|animals|terrains
-    def compile_info_for_runner(self, runner_location):
-        target = self.find_target(runner_location)
+    def compile_info_for_runner(self, sock):
+        target = self.find_target(sock)
         # use standard prepare_info function to help compile some info and then rearrange using new schema
         info = prepare_info(self.terrains, self.coords, self.animal_locations, self.treasure_location, 
                             RUNNER_CODE, self.id, [target])
@@ -211,14 +212,19 @@ class Relayer:
         return "|".join([id, treasure, target, animals, terrain])
 
     # find a target grid position that is close to the runner but hasn't yet been checked for treasure
-    def find_target(self, runner_location):
+    def find_target(self, sock):
         if self.treasure_location is not None:
             return self.treasure_location
 
-        i, j = runner_location
+        # keep the same target if it hasn't been explored yet
+        if sock in self.existing_targets and (not self.checked_for_treasure[self.existing_targets[sock]]):
+            return self.existing_targets[sock]
+
+        i, j = self.runner_locations[sock]
+        # the furthest you can go (in terms of LINF norm) is the max distance to an edge of the map 
+        LINF_SWEEP_MAX = max(i, j, MAP_DIMENSIONS[0] - 1 - i, MAP_DIMENSIONS[1] - 1 - j)
         # L-infinity norm is the appropriate norm for this game since the runners can move in all 8 directions
         # iterate through grid positions near the runner by incrementing LINF norm
-        LINF_SWEEP_MAX = max(i, j, MAP_DIMENSIONS[0] - 1 - i, MAP_DIMENSIONS[1] - 1 - j)
         for LINF in range(LINF_SWEEP_MIN, LINF_SWEEP_MAX):
             coords = []
             # construct LINF box by creating each edge (top, left, bottom, right)
@@ -236,6 +242,7 @@ class Relayer:
             for coord in coords:
                 assert is_valid_location(coord), "this iteration should only include valid coordinates"
                 if not self.checked_for_treasure[coord]:
+                    self.existing_targets[sock] = coord
                     return coord
         raise Exception("Somehow every location on the map has been checked")
 

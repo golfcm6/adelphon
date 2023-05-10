@@ -55,7 +55,9 @@ LocalView = namedtuple("LocalView", ['terrain', 'animals', 'treasure'])
 
 class Game:
     def __init__(self, seed):
-        np.random.seed(seed)
+        self.starting_seed = seed
+        self.game_clock = 0
+        np.random.seed(self.starting_seed + self.game_clock)
         self.relayer_locations = self.relayer_init()
         self.runner_start_locations = [self.random_coord_helper() for _ in range(NUM_RUNNERS)]
         self.animal_locations = tuple(self.random_coord_helper() for _ in range(NUM_ANIMALS))
@@ -66,9 +68,14 @@ class Game:
         runner_start_terrains = [Terrain(self.terrain[loc]) for loc in self.runner_start_locations]
         self.runner_start_wait_times = [WAIT_TIME_MAP[terrain] for terrain in runner_start_terrains]
 
-    def query(self, location, is_relayer):
+    def query(self, location, is_runner):
+        # reseed so all processes running the game have same source of randomness
+        self.game_clock += 1
+        np.random.seed(self.starting_seed + self.game_clock)
+        # update animals on every timestep
+        self.update_animals()
         # only runners can find treasure or get killed by animals
-        if not is_relayer:
+        if is_runner:
             if location == self.treasure:
                 return GameState(alive = True, won = True, wait_time = 0, local_view = None)  # treasure found and game won
 
@@ -76,9 +83,6 @@ class Game:
                 # death (killed by an animal)
                 if distance(location, animal_location) <= KILL_RADIUS:
                     return GameState(alive = False, won = False, wait_time = 0, local_view = None)
-
-        # update animals on every timestep
-        self.update_animals()
 
         # any other outcome means you are still alive and get local_view
         # convention: animal_radius > terrain_radius >> treasure_radius
