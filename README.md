@@ -8,6 +8,12 @@
 
 -   Start the program by running `python spawn.py [seed]` where seed is an optional integer argument. If you do not supply a seed, one will automatically be chosen for you. Use the seed to rerun the same game scenario.
 
+## Update
+-   We made a few updates after the due date:
+    - Fixed a major bug where the animal positions in each process diverged due to a variable number of extra np.random calls in the runner processes (the processes each run their own game instance, and they only agree on the state of the game because they all use the same seed and make the same calls in the same order: extra random calls broke this alignment)
+    - Implemented Dijkstra's algorithm for pathfinding and added complementary logic to remove frequent changes to the runners' targets
+- **Our original submission is at [this commit](https://github.com/golfcm6/adelphon/tree/f978baeba21f88e1cc34cda047416389e4610f09)**
+
 ## The Game
 
 -   The players are split into two groups: runners and relayers
