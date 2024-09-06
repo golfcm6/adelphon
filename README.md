@@ -4,6 +4,8 @@
 
 ## By Ashlan Ahmed, Christy Jestin, Charles Ma
 
+![image](https://github.com/user-attachments/assets/bbc91f31-fde5-43da-b5fe-1cd8a649c2a4)
+
 ## How To Run
 
 -   Start the program by running `python spawn.py [seed]` where seed is an optional integer argument. If you do not supply a seed, one will automatically be chosen for you. Use the seed to rerun the same game scenario.
